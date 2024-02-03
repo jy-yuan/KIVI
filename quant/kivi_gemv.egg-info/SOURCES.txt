@@ -1,0 +1,8 @@
+setup.py
+csrc/gemv_cuda.cu
+csrc/pybind.cpp
+kivi_gemv.egg-info/PKG-INFO
+kivi_gemv.egg-info/SOURCES.txt
+kivi_gemv.egg-info/dependency_links.txt
+kivi_gemv.egg-info/requires.txt
+kivi_gemv.egg-info/top_level.txt

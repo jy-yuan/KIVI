@@ -1,0 +1,33 @@
+ninja_required_version = 1.3
+cxx = c++
+nvcc = /usr/local/cuda/bin/nvcc
+
+cflags = -pthread -B /home/jy101/anaconda3/envs/awq/compiler_compat -Wno-unused-result -Wsign-compare -DNDEBUG -fwrapv -O2 -Wall -fPIC -O2 -isystem /home/jy101/anaconda3/envs/awq/include -fPIC -O2 -isystem /home/jy101/anaconda3/envs/awq/include -fPIC -I/home/jy101/anaconda3/envs/awq/lib/python3.10/site-packages/torch/include -I/home/jy101/anaconda3/envs/awq/lib/python3.10/site-packages/torch/include/torch/csrc/api/include -I/home/jy101/anaconda3/envs/awq/lib/python3.10/site-packages/torch/include/TH -I/home/jy101/anaconda3/envs/awq/lib/python3.10/site-packages/torch/include/THC -I/usr/local/cuda/include -I/home/jy101/anaconda3/envs/awq/include/python3.10 -c
+post_cflags = -g -O3 -fopenmp -lgomp -std=c++17 -DENABLE_BF16 -DTORCH_API_INCLUDE_EXTENSION_H '-DPYBIND11_COMPILER_TYPE="_gcc"' '-DPYBIND11_STDLIB="_libstdcpp"' '-DPYBIND11_BUILD_ABI="_cxxabi1011"' -DTORCH_EXTENSION_NAME=kivi_gemv -D_GLIBCXX_USE_CXX11_ABI=0
+cuda_cflags = -I/home/jy101/anaconda3/envs/awq/lib/python3.10/site-packages/torch/include -I/home/jy101/anaconda3/envs/awq/lib/python3.10/site-packages/torch/include/torch/csrc/api/include -I/home/jy101/anaconda3/envs/awq/lib/python3.10/site-packages/torch/include/TH -I/home/jy101/anaconda3/envs/awq/lib/python3.10/site-packages/torch/include/THC -I/usr/local/cuda/include -I/home/jy101/anaconda3/envs/awq/include/python3.10 -c
+cuda_post_cflags = -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -DENABLE_BF16 -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_BFLOAT16_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ -U__CUDA_NO_BFLOAT162_OPERATORS__ -U__CUDA_NO_BFLOAT162_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda --use_fast_math --threads=8 -DTORCH_API_INCLUDE_EXTENSION_H '-DPYBIND11_COMPILER_TYPE="_gcc"' '-DPYBIND11_STDLIB="_libstdcpp"' '-DPYBIND11_BUILD_ABI="_cxxabi1011"' -DTORCH_EXTENSION_NAME=kivi_gemv -D_GLIBCXX_USE_CXX11_ABI=0 -gencode=arch=compute_80,code=compute_80 -gencode=arch=compute_80,code=sm_80
+cuda_dlink_post_cflags = 
+ldflags = 
+
+rule compile
+  command = $cxx -MMD -MF $out.d $cflags -c $in -o $out $post_cflags
+  depfile = $out.d
+  deps = gcc
+
+rule cuda_compile
+  depfile = $out.d
+  deps = gcc
+  command = $nvcc  $cuda_cflags -c $in -o $out $cuda_post_cflags
+
+
+
+
+
+build /home/jy101/1bit_kvcache/quant/build/temp.linux-x86_64-cpython-310/csrc/gemv_cuda.o: cuda_compile /home/jy101/1bit_kvcache/quant/csrc/gemv_cuda.cu
+build /home/jy101/1bit_kvcache/quant/build/temp.linux-x86_64-cpython-310/csrc/pybind.o: compile /home/jy101/1bit_kvcache/quant/csrc/pybind.cpp
+
+
+
+
+
+
