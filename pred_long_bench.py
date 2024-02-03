@@ -6,12 +6,8 @@ from tqdm import tqdm
 import numpy as np
 import random
 import argparse
-# from llama_flash_attn_monkey_patch import replace_llama_attn_with_flash_attn
 
 os.environ["WANDB_DISABLED"] = "true"
-# from models.modeling_llama import (
-#     LlamaForCausalLM as LlamaForCausalLMQuant,
-# )
 from models.modeling_llama_quant import (
     LlamaForCausalLM as LlamaForCausalLMQuant,
 )
@@ -107,31 +103,6 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
     torch.cuda.manual_seed_all(seed)
 
-# def load_model_and_tokenizer(path, model_name, device):
-#     if "chatglm" in model_name or "internlm" in model_name or "xgen" in model_name:
-#         tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
-#         model = AutoModelForCausalLM.from_pretrained(path, trust_remote_code=True, torch_dtype=torch.bfloat16).to(device)
-#     elif "llama2" in model_name:
-#         replace_llama_attn_with_flash_attn()
-#         tokenizer = LlamaTokenizer.from_pretrained(path)
-#         model = LlamaForCausalLM.from_pretrained(path, torch_dtype=torch.bfloat16).to(device)
-#     elif "longchat" in model_name or "vicuna" in model_name:
-#         from fastchat.model import load_model
-#         replace_llama_attn_with_flash_attn()
-#         model, _ = load_model(
-#             path,
-#             device='cpu',
-#             num_gpus=0,
-#             load_8bit=False,
-#             cpu_offloading=False,
-#             debug=False,
-#         )
-#         model = model.to(device)
-#         model = model.bfloat16()
-#         tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
-#     model = model.eval()
-#     return model, tokenizer
-
 if __name__ == '__main__':
     seed_everything(42)
     # args = parse_args()
@@ -157,18 +128,6 @@ if __name__ == '__main__':
                                             trust_remote_code=True, 
                                             tokenizer_type='llama')
                                             # model_max_length=training_args.model_max_length)
-    elif 'falcon' in model_args.model_name_or_path.lower():
-        config = FalconConfig.from_pretrained(model_args.model_name_or_path)
-        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, 
-                                            use_fast=False, 
-                                            trust_remote_code=True)
-                                            # model_max_length=training_args.model_max_length)
-    elif 'mistral' in model_args.model_name_or_path.lower():
-        config = MistralConfig.from_pretrained(model_args.model_name_or_path)
-        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, 
-                                            use_fast=False, 
-                                            trust_remote_code=True)
-                                            # model_max_length=training_args.model_max_length)
     else:
         raise NotImplementedError
     if 'llama' in model_args.model_name_or_path.lower():
@@ -193,57 +152,8 @@ if __name__ == '__main__':
             low_cpu_mem_usage=True,
             device_map="auto",
         )
-        
-        # torch.distributed.init_process_group()
-        # model = deepspeed.init_inference(
-        #     model=model,      # Transformers models
-        #     mp_size=torch.cuda.device_count(),        # Number of GPU
-        #     dtype=torch.float16, # dtype of the weights (fp16)
-        #     replace_method="auto", # Lets DS autmatically identify the layer to replace
-        #     replace_with_kernel_inject=False, # replace the model with the kernel injector
-        # )
-    elif 'falcon' in model_args.model_name_or_path.lower():
-        if data_args.use_our_imp:
-            print('#' * 50 + 'Use our KV cache quantization' + '#' * 50) 
-            from models.modeling_falcon_quant import FalconForCausalLM
-
-            config.k_bits = model_args.k_bits
-            config.v_bits = model_args.v_bits
-            config.group_size = model_args.group_size
-            config.buffer_length = model_args.buffer_length
-        else:
-            print('#' * 50 + 'Use original Falcon implementation' + '#' * 50) 
-            from models.modeling_falcon import FalconForCausalLM
-            
-        model = FalconForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=model_args.model_name_or_path,
-            config=config,
-            cache_dir=training_args.cache_dir,
-            torch_dtype=dtype,
-            low_cpu_mem_usage=True,
-            device_map="auto",
-        )
-    elif 'mistral' in model_args.model_name_or_path.lower():
-        if data_args.use_our_imp:
-            print('#' * 50 + 'Use our KV cache quantization' + '#' * 50) 
-            from models.modeling_mistral_quant import MistralForCausalLM
-
-            config.k_bits = model_args.k_bits
-            config.v_bits = model_args.v_bits
-            config.group_size = model_args.group_size
-            config.buffer_length = model_args.buffer_length
-        else:
-            print('#' * 50 + 'Use original Mistral implementation' + '#' * 50) 
-            from models.modeling_mistral import MistralForCausalLM
-            
-        model = MistralForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=model_args.model_name_or_path,
-            config=config,
-            cache_dir=training_args.cache_dir,
-            torch_dtype=dtype,
-            low_cpu_mem_usage=True,
-            device_map="auto",
-        )
+    else:
+        raise NotImplementedError
         
     if model_args.load_quant:
         model = load_saved_awq_model(model, model_args.load_quant, config, dtype, model_args.w_bit, q_config)
@@ -255,15 +165,10 @@ if __name__ == '__main__':
     model.eval()
     max_length = model2maxlen[model_name]
     if data_args.e:
-        # datasets = ["qasper", "multifieldqa_en", "hotpotqa", "2wikimqa", "gov_report", "multi_news", \
-        #     "trec", "triviaqa", "samsum", "passage_count", "passage_retrieval_en", "lcc", "repobench-p"]
-        # datasets = ["triviaqa", "qasper", "trec", "samsum"]
-        datasets = ["triviaqa", "qasper", "trec", "samsum", "lcc", "repobench-p", "gov_report", "qmsum", "multi_news"]
+        datasets = ["qasper", "multifieldqa_en", "hotpotqa", "2wikimqa", "gov_report", "multi_news", 
+                    "trec", "triviaqa", "samsum", "passage_count", "passage_retrieval_en", "lcc", "repobench-p"]
     else:
-        # datasets = ["narrativeqa", "qasper", "multifieldqa_en", "multifieldqa_zh", "hotpotqa", "2wikimqa", "musique", \
-        #             "dureader", "gov_report", "qmsum", "multi_news", "vcsum", "trec", "triviaqa", "samsum", "lsht", \
-        #             "passage_count", "passage_retrieval_en", "passage_retrieval_zh", "lcc", "repobench-p"]
-        datasets = ["triviaqa", "qasper", "trec", "samsum", "lcc", "repobench-p", "gov_report", "qmsum", "multi_news"]
+        datasets = ["triviaqa", "qasper", "trec", "samsum", "lcc", "repobench-p", "qmsum", "multi_news"]
     # we design specific prompt format and max generation length for each task, feel free to modify them to optimize model output
     dataset2prompt = json.load(open("config/dataset2prompt.json", "r"))
     dataset2maxlen = json.load(open("config/dataset2maxlen.json", "r"))
