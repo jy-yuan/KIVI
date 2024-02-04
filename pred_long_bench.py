@@ -8,13 +8,9 @@ import random
 import argparse
 
 os.environ["WANDB_DISABLED"] = "true"
-from models.modeling_llama_quant import (
-    LlamaForCausalLM as LlamaForCausalLMQuant,
-)
 
 from utils.process_args import process_args
 from transformers import LlamaConfig, FalconConfig, MptConfig, MistralConfig, AutoTokenizer
-from quant.load_awq_model import load_saved_awq_model
 
 import deepspeed
 
@@ -26,27 +22,10 @@ def parse_args(args=None):
 
 # This is the customized building prompt for chat models
 def build_chat(tokenizer, prompt, model_name):
-    if "chatglm3" in model_name:
-        prompt = tokenizer.build_chat_input(prompt).input_ids[0]
-        prompt = tokenizer.decode(prompt[2:], skip_special_tokens=True)
-    elif "chatglm" in model_name:
-        prompt = tokenizer.build_prompt(prompt)
-    elif "longchat" in model_name or "vicuna" in model_name:
-        from fastchat.model import get_conversation_template
-        conv = get_conversation_template("vicuna")
-        conv.append_message(conv.roles[0], prompt)
-        conv.append_message(conv.roles[1], None)
-        prompt = conv.get_prompt()
-    elif "llama2" in model_name:
+    if "llama" in model_name:
         prompt = f"[INST]{prompt}[/INST]"
-    elif "xgen" in model_name:
-        header = (
-            "A chat between a curious human and an artificial intelligence assistant. "
-            "The assistant gives helpful, detailed, and polite answers to the human's questions.\n\n"
-        )
-        prompt = header + f" ### Human: {prompt}\n###"
-    elif "internlm" in model_name:
-        prompt = f"<|User|>:{prompt}<eoh>\n<|Bot|>:"
+    else:
+        raise NotImplementedError
     return prompt
 
 def post_process(response, model_name):
@@ -117,10 +96,6 @@ if __name__ == '__main__':
     model_name = model_args.model_name_or_path.split("/")[-1]
     # dtype = torch.bfloat16 if training_args.bf16 else torch.float
     dtype = torch.float16
-    q_config = {
-        "zero_point": True,  # by default True
-        "q_group_size": 128,  # whether to use group quantization
-    }
     if 'llama' in model_args.model_name_or_path.lower():
         config = LlamaConfig.from_pretrained(model_args.model_name_or_path)
         tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, 
@@ -131,19 +106,7 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError
     if 'llama' in model_args.model_name_or_path.lower():
-        if data_args.use_our_imp:
-            print('#' * 50 + 'Use our KV cache quantization' + '#' * 50) 
-            from models.modeling_llama_quant import LlamaForCausalLM
-
-            config.k_bits = model_args.k_bits
-            config.v_bits = model_args.v_bits
-            config.group_size = model_args.group_size
-            config.buffer_length = model_args.buffer_length
-        else:
-            print('#' * 50 + 'Use original Llama implementation' + '#' * 50) 
-            from models.modeling_llama import LlamaForCausalLM
-
-        config.attention_dropout = 0.0
+        from transformers.models.llama.modeling_llama import LlamaForCausalLM
         model = LlamaForCausalLM.from_pretrained(
             pretrained_model_name_or_path=model_args.model_name_or_path,
             config=config,
@@ -154,9 +117,7 @@ if __name__ == '__main__':
         )
     else:
         raise NotImplementedError
-        
-    if model_args.load_quant:
-        model = load_saved_awq_model(model, model_args.load_quant, config, dtype, model_args.w_bit, q_config)
+
     #
     # Load model directly
     # tokenizer = AutoTokenizer.from_pretrained("togethercomputer/LLaMA-2-7B-32K")
