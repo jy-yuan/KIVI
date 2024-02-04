@@ -106,8 +106,14 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError
     if 'llama' in model_args.model_name_or_path.lower():
-        from transformers.models.llama.modeling_llama import LlamaForCausalLM
-        model = LlamaForCausalLM.from_pretrained(
+        from models.llama_kivi import LlamaForCausalLM_KIVI
+
+        config.k_bits = model_args.k_bits
+        config.v_bits = model_args.v_bits
+        config.group_size = model_args.group_size
+        config.buffer_length = model_args.buffer_length
+        
+        model = LlamaForCausalLM_KIVI.from_pretrained(
             pretrained_model_name_or_path=model_args.model_name_or_path,
             config=config,
             cache_dir=training_args.cache_dir,
