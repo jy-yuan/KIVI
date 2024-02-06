@@ -9,7 +9,6 @@ out_*
 *.sh
 *.jsonl
 *.pt
-*.png
 notebook
 dataset
 output_samples
