@@ -46,7 +46,6 @@ Load KIVI-quantized model.
 
 ```python
 # LLaMA model with KIVI
-
 from models.llama_kivi import LlamaForCausalLM_KIVI
 
 config.k_bits = K_BITS
@@ -69,7 +68,8 @@ tokenizer = AutoTokenizer.from_pretrained(
     trust_remote_code=True, 
     tokenizer_type='llama')
 
-# Inference, e.g., loaded_model.generate(...)
+# Inference
+# e.g., model.generate(...)
 ```
 
 Evaluate KIVI on LongBench.
