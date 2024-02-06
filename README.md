@@ -6,7 +6,7 @@ Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache
 
 - [2024.02.05]: KIVI ver. 2 is released on [arXiv](https://arxiv.org/abs/2402.02750).
 
-- [2024.02.04]: KIVI code is released on github.
+- [2024.02.03]: KIVI code is released.
 
 - [2023.12.29]: KIVI ver. 1 is released on [researchgate](https://www.researchgate.net/publication/376831635_KIVI_Plug-and-play_2bit_KV_Cache_Quantization_with_Streaming_Asymmetric_Quantization).
 
@@ -14,15 +14,14 @@ Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache
 
 KIVI is a new plug-and-play 2bit KV cache quantization algorithm without any fine-tuning. This algorithm optimizes memory usage by quantizing the key cache per-channel and the value cache per-token to 2bit. KIVI's hardware-friendly design allows LLMs like Llama-2, Falcon, and Mistral to maintain comparable quality levels while reducing peak memory usage by 2.6 times. This enables up to 4 times larger batch sizes and significantly increases throughput by 2.35 to 3.47 times in real LLM inference workloads, effectively addressing the bottleneck issues in speed and memory usage.
 
-Illustration of KIVI quantization scheme:
-KIVI quantizes the key cache per-channel and the value cache per-token to 2bit.
+Illustration of KIVI quantization scheme: key cache per-channel and value cache per-token.
 <p align="center">
 <img width="300" src="./img/quant_scheme.png">
 </p>
 
-Illustration of KIVI quantization algorithm during inference prefill and decoding phase:
+Illustration of KIVI algorithm during inference prefill and decoding phase:
 <p align="center">
-<img width="800" src="./img/algo.png">
+<img width="700" src="./img/algo.png">
 </p>
 
 ## How to use KIVI
@@ -35,11 +34,10 @@ To install the required packages:
 pip install -r requirements.txt
 ```
 
-To install our CUDA inplementation:
+To install our CUDA implementation:
 
 ```bash
-cd quant
-pip install -e .
+cd quant && pip install -e .
 ```
 
 ### Example
