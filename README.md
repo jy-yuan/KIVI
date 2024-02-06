@@ -16,6 +16,9 @@ KIVI is a new plug-and-play 2bit KV cache quantization algorithm without any fin
 
 <p align="center">
 <img width="400" src="./img/quant_scheme.png">
+</p>
+
+<p align="center">
 Illustration of KIVI quantization scheme. KIVI quantizes the key cache per-channel and the value cache per-token to 2bit.
 <img width="800" src="./img/algo.png">
 Illustration of KIVI quantization algorithm during inference prefill and decoding phase.
