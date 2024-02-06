@@ -29,8 +29,17 @@ Illustration of KIVI quantization algorithm during inference prefill and decodin
 
 ### Setup
 
-```
+To install the required packages:
+
+```bash
 pip install -r requirements.txt
+```
+
+To install our CUDA inplementation:
+
+```bash
+cd quant
+pip install -e .
 ```
 
 ### Example
