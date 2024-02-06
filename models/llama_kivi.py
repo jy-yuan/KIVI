@@ -34,7 +34,7 @@ class LlamaAttention_KIVI(nn.Module):
         self.k_bits = config.k_bits
         self.v_bits = config.v_bits
         self.group_size = config.group_size
-        self.buffer_length = config.buffer_length
+        self.residual_length = config.residual_length
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -153,8 +153,8 @@ class LlamaAttention_KIVI(nn.Module):
             else:
                 attn_weights = att_qkfull / math.sqrt(self.head_dim)
 
-            if key_states_full.shape[-2] == self.buffer_length:
-                assert self.buffer_length % self.group_size == 0
+            if key_states_full.shape[-2] == self.residual_length:
+                assert self.residual_length % self.group_size == 0
                 key_states_quant_trans_new, key_scale_trans_new, key_mn_trans_new = triton_quantize_and_pack_along_last_dim(key_states_full.transpose(2, 3).contiguous(), 
                                                                                                                             self.group_size, 
                                                                                                                             self.k_bits)
@@ -196,8 +196,8 @@ class LlamaAttention_KIVI(nn.Module):
                                                 value_scale, value_mn, self.v_bits)
                 attn_output += torch.matmul(attn_weights[:, :, :, -value_full_length:], value_states_full)
             
-            if value_full_length > self.buffer_length:
-                assert value_full_length == self.buffer_length + 1
+            if value_full_length > self.residual_length:
+                assert value_full_length == self.residual_length + 1
                 value_states_quant_new, scale, mn = triton_quantize_and_pack_along_last_dim(value_states_full[:, :, :1, :].contiguous(), 
                                                                                                 self.group_size, 
                                                                                                 self.v_bits)
@@ -215,13 +215,13 @@ class LlamaAttention_KIVI(nn.Module):
             attn_weights = torch.matmul(query_states, 
                                         key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
             # quantize
-            if key_states.shape[-2] % self.buffer_length != 0:
-                if key_states.shape[-2] < self.buffer_length:
+            if key_states.shape[-2] % self.residual_length != 0:
+                if key_states.shape[-2] < self.residual_length:
                     key_states_quant = None
                     key_states_full = key_states
                 else:
-                    key_states_quant = key_states[:, :, :-(key_states.shape[-2] % self.buffer_length), :].contiguous()
-                    key_states_full = key_states[:, :, -(key_states.shape[-2] % self.buffer_length):, :].contiguous()
+                    key_states_quant = key_states[:, :, :-(key_states.shape[-2] % self.residual_length), :].contiguous()
+                    key_states_full = key_states[:, :, -(key_states.shape[-2] % self.residual_length):, :].contiguous()
             else:
                 key_states_quant = key_states
                 key_states_full = None
@@ -232,14 +232,14 @@ class LlamaAttention_KIVI(nn.Module):
                 key_scale_trans = None
                 key_mn_trans = None
             
-            if value_states.shape[-2] <= self.buffer_length:
+            if value_states.shape[-2] <= self.residual_length:
                 value_states_quant = None
                 value_states_full = value_states
                 value_scale = None
                 value_mn = None
             else:
-                value_states_quant = value_states[:, :, :-self.buffer_length, :].contiguous()
-                value_states_full = value_states[:, :, -self.buffer_length:, :].contiguous()
+                value_states_quant = value_states[:, :, :-self.residual_length, :].contiguous()
+                value_states_full = value_states[:, :, -self.residual_length:, :].contiguous()
                 value_states_quant, value_scale, value_mn = triton_quantize_and_pack_along_last_dim(value_states_quant, 
                                                                                                 self.group_size, 
                                                                                                 self.v_bits)

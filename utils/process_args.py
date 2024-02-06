@@ -37,9 +37,9 @@ class ModelArguments:
         default=128,
         metadata={"help": "KV_cache quantization group size."},
     )
-    buffer_length: Optional[int] = field(
+    residual_length: Optional[int] = field(
         default=128,
-        metadata={"help": "KV_cache buffer length."},
+        metadata={"help": "KV_cache residual length."},
     )
     output_model_filename: Optional[str] = field(
         default="test-output", metadata={"help": "Output model relative manifold path"}

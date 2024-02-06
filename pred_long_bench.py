@@ -111,7 +111,7 @@ if __name__ == '__main__':
         config.k_bits = model_args.k_bits
         config.v_bits = model_args.v_bits
         config.group_size = model_args.group_size
-        config.buffer_length = model_args.buffer_length
+        config.residual_length = model_args.residual_length
         
         model = LlamaForCausalLM_KIVI.from_pretrained(
             pretrained_model_name_or_path=model_args.model_name_or_path,
@@ -147,14 +147,14 @@ if __name__ == '__main__':
     for dataset in datasets:
         if data_args.e:
             data = load_dataset('THUDM/LongBench', f"{dataset}_e", split='test')
-            if not os.path.exists(f"pred_e/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_buffer{model_args.buffer_length}"):
-                os.makedirs(f"pred_e/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_buffer{model_args.buffer_length}")
-            out_path = f"pred_e/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_buffer{model_args.buffer_length}/{dataset}.jsonl"
+            if not os.path.exists(f"pred_e/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_residual{model_args.residual_length}"):
+                os.makedirs(f"pred_e/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_residual{model_args.residual_length}")
+            out_path = f"pred_e/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_residual{model_args.residual_length}/{dataset}.jsonl"
         else:
             data = load_dataset('THUDM/LongBench', dataset, split='test')
-            if not os.path.exists(f"pred/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_buffer{model_args.buffer_length}"):
-                os.makedirs(f"pred/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_buffer{model_args.buffer_length}")
-            out_path = f"pred/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_buffer{model_args.buffer_length}/{dataset}.jsonl"
+            if not os.path.exists(f"pred/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_residual{model_args.residual_length}"):
+                os.makedirs(f"pred/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_residual{model_args.residual_length}")
+            out_path = f"pred/{model_name}_{max_length}_{model_args.k_bits}bits_group{model_args.group_size}_residual{model_args.residual_length}/{dataset}.jsonl"
         prompt_format = dataset2prompt[dataset]
         max_gen = dataset2maxlen[dataset]
         preds = get_pred(model, tokenizer, data, max_length, max_gen, prompt_format, dataset, device, model_name)
