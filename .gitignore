@@ -5,7 +5,6 @@ cached_models
 *.egg-info
 build
 *.so
-*.txt
 out_*
 *.sh
 *.jsonl
