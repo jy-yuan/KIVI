@@ -15,8 +15,11 @@ Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache
 KIVI is a new plug-and-play 2bit KV cache quantization algorithm without any fine-tuning. This algorithm optimizes memory usage by quantizing the key cache per-channel and the value cache per-token to 2bit. KIVI's hardware-friendly design allows LLMs like Llama-2, Falcon, and Mistral to maintain comparable quality levels while reducing peak memory usage by 2.6 times. This enables up to 4 times larger batch sizes and significantly increases throughput by 2.35 to 3.47 times in real LLM inference workloads, effectively addressing the bottleneck issues in speed and memory usage.
 
 <p align="center">
-<img width="600" src="./img/quant_scheme.png">
-<img width="600" src="./img/algo.png">
+<img width="400" src="./img/quant_scheme.png">
+Illustration of KIVI quantization scheme. KIVI quantizes the key cache per-channel and the value cache per-token to 2bit.
+<img width="800" src="./img/algo.png">
+Illustration of KIVI quantization algorithm during inference prefill and decoding phase.
+</p>
 
 ## How to use KIVI
 
