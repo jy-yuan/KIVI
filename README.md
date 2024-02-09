@@ -83,12 +83,10 @@ bash scripts/long_test.sh {GPU_ID} {K_BITS} {V_BITS} {GROUP_LENGTH} {RESIDUAL_LE
 If you find our method useful, please kindly cite our paper.
 
 ```bibtex
-@misc{liu2024kivi,
-      title={KIVI : Plug-and-play 2bit KV Cache Quantization with Streaming Asymmetric Quantization}, 
-      author={Zirui Liu and Jiayi Yuan and Hongye Jin and Shaochen Zhong and Zhaozhuo Xu and Braverman, Vladimir and Beidi Chen and Xia Hu},
-      year={2024},
-      eprint={2402.02750},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@article{liu2024kivi,
+  title={KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache},
+  author={Liu, Zirui and Yuan, Jiayi and Jin, Hongye and Zhong, Shaochen and Xu, Zhaozhuo and Braverman, Vladimir and Chen, Beidi and Hu, Xia},
+  journal={arXiv preprint arXiv:2402.02750},
+  year={2024}
 }
 ```
