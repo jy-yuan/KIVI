@@ -31,7 +31,7 @@ Illustration of KIVI algorithm during inference prefill and decoding phase:
 To install the required packages:
 
 ```bash
-pip install -r requirements.txt
+conda create --name <env> --file requirements.txt
 ```
 
 To install our CUDA implementation:
