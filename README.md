@@ -31,7 +31,7 @@ Illustration of KIVI algorithm during inference prefill and decoding phase:
 To install the required packages:
 
 ```bash
-conda create --name <env> --file requirements.txt
+pip install -r requirements.txt
 ```
 
 To install our CUDA implementation:
@@ -42,11 +42,13 @@ cd quant && pip install -e .
 
 ### Example
 
-Load KIVI-quantized model.
+Load KIVI-quantized model: (e.g., Llama-2-7b)
 
 ```python
 # LLaMA model with KIVI
 from models.llama_kivi import LlamaForCausalLM_KIVI
+
+config = LlamaConfig.from_pretrained("meta-llama/Llama-2-7b-hf")
 
 config.k_bits = K_BITS
 config.v_bits = V_BITS
@@ -72,7 +74,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 # e.g., model.generate(...)
 ```
 
-Evaluate KIVI on LongBench.
+Evaluate KIVI on LongBench:
 
 ```bash
 bash scripts/long_test.sh {GPU_ID} {K_BITS} {V_BITS} {GROUP_LENGTH} {RESIDUAL_LENGTH} {MODEL_NAME}
