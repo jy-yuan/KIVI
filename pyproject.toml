@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kivi"
+version = "0.1.0"
+description = "An tuning-free 2/4/8 bit KV Cache quantization method for LLMs."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "packaging==24.0", "sentencepiece", "tokenizers>=0.15",
+    "torch==2.1.2", "ipdb",
+    "transformers==4.36.2", 
+    "toml", "attributedict",
+    "accelerate==0.25.0"
+    "protobuf",
+]
+
+[tool.setuptools.packages.find]
+exclude = ["results*", "scripts*", "examples*"]
+
+[tool.wheel]
+exclude = ["results*", "scripts*", "examples*"]

@@ -224,7 +224,6 @@ class AsymGroupedQuantizerByChannel(torch.autograd.Function):
         # input = torch.clamp(input, clip_val[0], clip_val[1])
         # input = torch.where(input < clip_val[1], input, clip_val[1])
         # input = torch.where(input > clip_val[0], input, clip_val[0])
-        import ipdb; ipdb.set_trace()
         bs, seqlen, d = input.shape
         mx, mn = input.max(dim=-2)[0], input.min(dim=-2)[0]
         mx, mn = mx.unsqueeze(-2), mn.unsqueeze(-2)
@@ -583,11 +582,9 @@ def test_quantize():
     input = torch.randn((1, 32, 340, 128), dtype=torch.float16, device='cuda')
     shape = input.shape
     quantized_v, scale, mn = quantize_and_pack(input, 128, 4, False)
-    import ipdb; ipdb.set_trace()
     dequantized_v = dequantize_and_unpack(quantized_v, 128, shape, 4, scale, mn, False)
 
     quantized_v, scale, mn = quantize_by_channel_and_pack_cache(input, 128, 4, False)
-    import ipdb; ipdb.set_trace()
     dequantized_v = dequantize_by_channel_and_unpack_cache(quantized_v, 128, shape, 4, scale, mn, False)
 
 

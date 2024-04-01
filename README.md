@@ -31,10 +31,13 @@ Illustration of KIVI algorithm during inference prefill and decoding phase:
 To install the required packages:
 
 ```bash
-pip install -r requirements.txt
+conda create -n kivi python=3.10
+conda activate kivi
+pip install --upgrade pip  # enable PEP 660 support
+pip install -e .
 ```
 
-To install our CUDA implementation:
+Then install our CUDA implementation:
 
 ```bash
 cd quant && pip install -e .
@@ -46,19 +49,22 @@ Load KIVI-quantized model: (e.g., Llama-2-7b)
 
 ```python
 # LLaMA model with KIVI
+import torch
+import os
 from models.llama_kivi import LlamaForCausalLM_KIVI
-
+from transformers import LlamaConfig, AutoTokenizer
 config = LlamaConfig.from_pretrained("meta-llama/Llama-2-7b-hf")
 
 config.k_bits = K_BITS
 config.v_bits = V_BITS
 config.group_size = GROUP_SIZE
 config.residual_length = RESIDUAL_LENGTH
+CACHE_DIR = PATH_TO_YOUR_SAVE_DIR
 
 model = LlamaForCausalLM_KIVI.from_pretrained(
     pretrained_model_name_or_path='meta-llama/Llama-2-7b-hf',
     config=config,
-    cache_dir=training_args.cache_dir,
+    cache_dir=CACHE_DIR,
     torch_dtype=dtype,
     low_cpu_mem_usage=True,
     device_map="auto",
