@@ -17,7 +17,7 @@ dependencies = [
     "torch==2.1.2", "ipdb",
     "transformers==4.36.2", 
     "toml", "attributedict",
-    "accelerate==0.25.0"
+    "accelerate==0.25.0",
     "protobuf",
 ]
 
