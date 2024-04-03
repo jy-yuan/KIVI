@@ -3,6 +3,7 @@
 Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
 
 ## Updates
+- [2024.04.03]: We add a new GSM8K example to show the performance of 2/4 bit KiVi.
 
 - [2024.02.05]: KIVI ver. 2 is released on [arXiv](https://arxiv.org/abs/2402.02750).
 
@@ -55,10 +56,10 @@ from models.llama_kivi import LlamaForCausalLM_KIVI
 from transformers import LlamaConfig, AutoTokenizer
 config = LlamaConfig.from_pretrained("meta-llama/Llama-2-7b-hf")
 
-config.k_bits = K_BITS
-config.v_bits = V_BITS
+config.k_bits = K_BITS # current support 2/4 bit for KV Cache
+config.v_bits = V_BITS # current support 2/4 bit for KV Cache
 config.group_size = GROUP_SIZE
-config.residual_length = RESIDUAL_LENGTH
+config.residual_length = RESIDUAL_LENGTH # the number of recent fp16 tokens
 CACHE_DIR = PATH_TO_YOUR_SAVE_DIR
 
 model = LlamaForCausalLM_KIVI.from_pretrained(
@@ -79,6 +80,11 @@ tokenizer = AutoTokenizer.from_pretrained(
 # Inference
 # e.g., model.generate(...)
 ```
+We use GSM8K as an example to show how to use KiVi. You may check [example.py](./example.py):
+
+```bash
+python example.py
+```
 
 Evaluate KIVI on LongBench:
 
@@ -98,3 +104,9 @@ If you find our method useful, please kindly cite our paper.
   year={2024}
 }
 ```
+
+## Contributing
+We welcome contributions from the research community to improve the effeicency of KiVi. If you have any idea or would like to report a bug, please open an issue or submit a pull request.
+
+## License
+The code is released under the MIT License.
