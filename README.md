@@ -3,7 +3,7 @@
 Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
 
 ## Updates
-- [2024.04.03]: We add a new GSM8K example to show the performance of 2/4 bit KiVi.
+- [2024.04.03]: We add a new [GSM8K example.py](./example.py) to show the performance of 2/4 bit KiVi.
 
 - [2024.02.05]: KIVI ver. 2 is released on [arXiv](https://arxiv.org/abs/2402.02750).
 
@@ -80,7 +80,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 # Inference
 # e.g., model.generate(...)
 ```
-We use GSM8K as an example to show how to use KiVi. You may check [example.py](./example.py):
+We use GSM8K as an example to show how to use KiVi. You can check [example.py](./example.py):
 
 ```bash
 python example.py
