@@ -3,7 +3,7 @@
 Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
 
 ## Updates
-- [2024.04.03]: We add a new [GSM8K example.py](./example.py) to show the performance of 2/4 bit KiVi.
+- [2024.04.03]: We add a new [5-shot GSM8K example.py](./example.py) to show the performance of 2/4 bit KiVi with 32 full precision tokens.
 
 - [2024.02.05]: KIVI ver. 2 is released on [arXiv](https://arxiv.org/abs/2402.02750).
 
