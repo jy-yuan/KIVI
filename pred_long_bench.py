@@ -102,7 +102,6 @@ if __name__ == '__main__':
                                             use_fast=False, 
                                             trust_remote_code=True, 
                                             tokenizer_type='llama')
-                                            # model_max_length=training_args.model_max_length)
     else:
         raise NotImplementedError
     if 'llama' in model_args.model_name_or_path.lower():

@@ -1,5 +1,5 @@
 
-#meta-llama/Llama-2-7b-chat-hf
+#meta-llama/Llama-2-7b-hf
 #huggyllama/llama-7b
 gpuid=$1
 k_bits=$2

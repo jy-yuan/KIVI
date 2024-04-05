@@ -84,6 +84,17 @@ tokenizer = AutoTokenizer.from_pretrained(
 # Inference
 # e.g., model.generate(...)
 ```
+
+Use lm-eval to evaluate model on downstream tasks (e.g. GSM8K, Coqa, etc.):
+```bash
+cd lm-evaluation-harness
+pip install -e .
+cd ..
+
+# We report TASK in {coqa, truthfulqa_gen, gsm8k} in our paper.
+bash scripts/lmeval_test.sh {GPU_ID} {K_BITS} {V_BITS} {GROUP_LENGTH} {RESIDUAL_LENGTH} {TASK} {MODEL_NAME}
+```
+
 We use GSM8K as an example to show how to use KiVi. You can check [example.py](./example.py):
 
 ```bash

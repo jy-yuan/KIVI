@@ -975,3 +975,230 @@ class LlamaForCausalLM_KIVI(LlamaPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+import os
+import transformers
+from lm_eval.models.huggingface import HFLM, eval_logger, _get_accelerate_args
+from lm_eval import utils
+from accelerate import Accelerator, DistributedType
+
+
+class LMEvalLlamaForCausalLM_KIVI(HFLM):
+    AUTO_MODEL_CLASS = None
+    _DEFAULT_MAX_LENGTH = 2048
+    def __init__(
+        self,
+        k_bits,
+        v_bits,
+        group_size,
+        residual_length,
+        pretrained: Optional[str] = "gpt2",
+        revision: Optional[str] = "main",
+        subfolder: Optional[str] = None,
+        tokenizer: Optional[str] = None,
+        truncation: Optional[bool] = False,
+        max_length: Optional[int] = None,
+        device: Optional[str] = "cuda",
+        dtype: Optional[Union[str, torch.dtype]] = "auto",
+        batch_size: Optional[Union[int, str]] = 1,
+        max_batch_size: Optional[int] = 64,
+        low_cpu_mem_usage: Optional[bool] = True,
+        trust_remote_code: Optional[bool] = False,
+        use_fast_tokenizer: Optional[bool] = True,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        # arguments used for splitting a model across GPUs naively.
+        # only used if `parallelize=True`.
+        parallelize: Optional[bool] = False,
+        device_map_option: Optional[str] = "auto",
+        max_memory_per_gpu: Optional[Union[int, str]] = None,
+        max_cpu_memory: Optional[Union[int, str]] = None,
+        offload_folder: Optional[str] = "./offload",
+        load_in_8bit: Optional[bool] = False,
+        load_in_4bit: Optional[bool] = False,
+        bnb_4bit_quant_type: Optional[str] = None,
+        bnb_4bit_compute_dtype: Optional[Union[str, torch.dtype]] = None,
+        gptq: Optional[Union[bool, str]] = False,
+        gptq_use_triton: Optional[bool] = False,
+    ) -> None:
+        super().__init__()
+
+        assert isinstance(device, str)
+        assert isinstance(pretrained, str)
+        assert isinstance(batch_size, (int, str))
+
+        gpus = torch.cuda.device_count()
+        accelerator = Accelerator()
+
+        if not (parallelize or accelerator.num_processes > 1):
+            # use user-passed device
+            device_list = set(
+                ["cuda", "cpu"]
+                + [f"cuda:{i}" for i in range(torch.cuda.device_count())]
+                + ["mps", "mps:0"]
+            )
+            if device:
+                if device not in device_list:
+                    device = int(device)
+                self._device = torch.device(device)
+                eval_logger.info(f"Using device '{device}'")
+                if device in ("mps", "mps:0") and "dev" not in torch.__version__:
+                    eval_logger.info(
+                        "MPS: Setting dtype to float32. To use float16 with MPS, please install a nightly build of "
+                        "PyTorch: pip3 install --pre torch torchvision torchaudio --index-url "
+                        "https://download.pytorch.org/whl/nightly/cpu"
+                    )
+            else:
+                eval_logger.info("Device not specified")
+                eval_logger.info(f"Cuda Available? {torch.cuda.is_available()}")
+                self._device = (
+                    torch.device("cuda")
+                    if torch.cuda.is_available()
+                    else torch.device("cpu")
+                )
+        else:
+            if device != "cuda":
+                eval_logger.info(
+                    f"Using `accelerate launch` or `parallelize=True`, device '{device}' will be overridden when placing model."
+                )
+            # TODO: include in warning that `load_in_8bit` etc. affect this too
+            self._device = device
+
+        model_kwargs = {}
+        if parallelize:
+            model_kwargs = _get_accelerate_args(
+                device_map_option,
+                max_memory_per_gpu,
+                max_cpu_memory,
+                offload_folder,
+            )
+
+        # TODO: update this to be less of a hack once subfolder is fixed in HF
+        revision = revision + ("/" + subfolder if subfolder is not None else "")
+
+        self._config = transformers.AutoConfig.from_pretrained(
+            pretrained,
+            revision=revision,
+            trust_remote_code=trust_remote_code,
+        )
+        self._config.k_bits = k_bits
+        self._config.v_bits = v_bits
+        self._config.group_size = group_size
+        self._config.residual_length = residual_length
+        self._config.attention_dropout = 0.0
+        assert self._config.use_cache
+        if not gptq:
+            if load_in_4bit:
+                assert (
+                    transformers.__version__ >= "4.30.0"
+                ), "load_in_4bit requires transformers >= 4.30.0"
+            if transformers.__version__ >= "4.30.0":
+                model_kwargs["load_in_4bit"] = load_in_4bit
+                if load_in_4bit:
+                    if bnb_4bit_quant_type:
+                        model_kwargs["bnb_4bit_quant_type"] = bnb_4bit_quant_type
+                    if bnb_4bit_compute_dtype:
+                        model_kwargs["bnb_4bit_compute_dtype"] = utils.get_dtype(
+                            bnb_4bit_compute_dtype
+                        )
+            self._model = LlamaForCausalLM_KIVI.from_pretrained(
+                pretrained,
+                cache_dir=cache_dir,
+                revision=revision,
+                config=self._config,
+                torch_dtype=utils.get_dtype(dtype),
+                low_cpu_mem_usage=low_cpu_mem_usage,
+                trust_remote_code=trust_remote_code,
+                load_in_8bit=True,
+                **model_kwargs,
+            )
+        else:
+            raise NotImplementedError
+        # forever after, access self._model through self.model property
+        self.model.eval()
+        self.model.tie_weights()
+        if gpus <= 1 and not parallelize:
+            # place model onto device, if not using HF Accelerate in any form
+            try:
+                self.model.to(self.device)
+            except ValueError:
+                eval_logger.info(
+                    "Failed to place model onto specified device. This may be because the model is quantized via `bitsandbytes`. If the desired GPU is being used, this message is safe to ignore."
+                )
+
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+            pretrained if tokenizer is None else tokenizer,
+            revision=revision,
+            trust_remote_code=trust_remote_code,
+            use_fast=use_fast_tokenizer,
+        )
+
+        self.truncation = truncation
+
+        self.vocab_size = self.tokenizer.vocab_size
+        self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+
+        self._max_length = max_length
+
+        self.batch_schedule = 1
+        self.batch_sizes = {}
+        self.max_batch_size = max_batch_size
+
+        if str(batch_size).startswith("auto"):
+            batch_size = batch_size.split(":")
+            self.batch_size_per_gpu = batch_size[0]
+            self.batch_schedule = float(batch_size[1]) if len(batch_size) > 1 else 1
+        else:
+            self.batch_size_per_gpu = int(batch_size)
+
+        # multigpu data-parallel support when launched with accelerate
+        if gpus > 1:
+            if parallelize:
+                if accelerator.num_processes > 1:
+                    raise RuntimeError(
+                        "Attempted to use both a HF Accelerate `device_map` and to launch via `accelerate launch`. If this is the case, please either remove `parallelize=True` from --model_args or launch outside of the Accelerate launcher."
+                    )
+                else:
+                    pass
+            elif gpus > accelerator.num_processes:
+                # TODO: make sure there's still never an edge case where we unintentionally default to CPU
+                eval_logger.warning(
+                    "WARNING: The number of total system GPUs does not match the number of spawned processes. "
+                    "If you would like to use data parallelism, please launch the script "
+                    "with 'accelerate launch *script*'. "
+                    f"Current run will proceed with {accelerator.num_processes} devices."
+                )
+                self._rank = accelerator.local_process_index
+                self._world_size = accelerator.num_processes
+                # manually set model to use gpu, for case where many GPUs available but
+                # only seek to use one
+                self._device = (
+                    torch.device(f"cuda:{accelerator.local_process_index}")
+                    if torch.cuda.is_available()
+                    else torch.device("cpu")
+                )
+                try:
+                    self.model.to(self.device)
+                except ValueError:
+                    eval_logger.info(
+                        "Failed to place model onto specified device. This may be because the model is quantized via `bitsandbytes`. If the desired GPU is being used, this message is safe to ignore."
+                    )
+            else:
+                assert accelerator.distributed_type in [
+                    DistributedType.FSDP,
+                    DistributedType.MULTI_GPU,
+                ], "Unsupported distributed type provided. Only DDP and FSDP are supported."
+                if accelerator.distributed_type == DistributedType.FSDP:
+                    self._model = accelerator.prepare(self.model)
+                else:
+                    self._model = accelerator.prepare_model(
+                        self.model, evaluation_mode=True
+                    )
+                self._device = torch.device(f"cuda:{accelerator.local_process_index}")
+                self.accelerator = accelerator
+
+                if self.accelerator.is_local_main_process:
+                    eval_logger.info(f"Using {gpus} devices with data parallelism")
+
+                self._rank = self.accelerator.local_process_index
+                self._world_size = self.accelerator.num_processes
