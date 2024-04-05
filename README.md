@@ -3,6 +3,10 @@
 Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
 
 ## Updates
+- [2024.04.04]: 🔥🔥We add a new 5-digit [passkey example](./long_context_example.py) with 12k context length to show the performance of 2 bit KiVi under the long context senario.
+
+- [2024.04.04]: (Beta) We add the flash-attention support for KiVi during the prefill phase. 
+
 - [2024.04.03]: We add a new [5-shot GSM8K example.py](./example.py) to show the performance of 2/4 bit KiVi with 32 full precision tokens.
 
 - [2024.02.05]: KIVI ver. 2 is released on [arXiv](https://arxiv.org/abs/2402.02750).

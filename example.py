@@ -1,4 +1,6 @@
 # LLaMA model with KIVI
+import warnings
+warnings.filterwarnings("ignore")
 import torch
 import random
 from models.llama_kivi import LlamaForCausalLM_KIVI

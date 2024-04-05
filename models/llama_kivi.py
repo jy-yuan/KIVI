@@ -286,6 +286,304 @@ class LlamaAttention_KIVI(nn.Module):
         attn_weights = None
         return attn_output, attn_weights, past_key_value
     
+class LlamaFlashAttention_KIVI(LlamaAttention_KIVI):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+        bsz, q_len, _ = hidden_states.size()
+
+        if self.config.pretraining_tp > 1:
+            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+            query_slices = self.q_proj.weight.split(
+                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+            )
+            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
+            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
+
+            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
+            query_states = torch.cat(query_states, dim=-1)
+
+            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
+            key_states = torch.cat(key_states, dim=-1)
+
+            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
+            value_states = torch.cat(value_states, dim=-1)
+
+        else:
+            query_states = self.q_proj(hidden_states)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[-1]
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        assert self.num_key_value_groups == 1
+        # [bsz, nh, t, hd]
+        if past_key_value is not None:
+            key_states_quant_trans = past_key_value[0]
+            key_states_full = past_key_value[1]
+            key_scale_trans = past_key_value[2]
+            key_mn_trans = past_key_value[3]
+            value_states_quant = past_key_value[4]
+            value_states_full = past_key_value[5]
+            value_scale = past_key_value[6]
+            value_mn = past_key_value[7]
+
+            if key_states_quant_trans is not None:
+                att_qkquant = cuda_bmm_fA_qB_outer(self.group_size, query_states, key_states_quant_trans, 
+                                key_scale_trans, key_mn_trans, self.k_bits)
+                # att_qkquant_ref = triton_bmm_fA_qB_outer(self.group_size, query_states, key_states_quant_trans, 
+                #                 key_scale_trans, key_mn_trans, self.k_bits)
+                # error = torch.abs(att_qkquant - att_qkquant_ref).float()
+                # rel_error = torch.mean(error / (torch.abs(att_qkquant_ref).float()+1e-5))
+                # print(f"rel error: {rel_error}")
+            else:
+                att_qkquant = None
+            if key_states_full is not None:
+                key_states_full = torch.cat([key_states_full, key_states], dim=2)
+            else:
+                key_states_full = key_states
+            att_qkfull = torch.matmul(query_states, key_states_full.transpose(2, 3))
+            if att_qkquant is not None:
+                attn_weights = torch.cat([att_qkquant, att_qkfull], dim=-1) / math.sqrt(self.head_dim)
+            else:
+                attn_weights = att_qkfull / math.sqrt(self.head_dim)
+
+            if key_states_full.shape[-2] == self.residual_length:
+                assert self.residual_length % self.group_size == 0
+                key_states_quant_trans_new, key_scale_trans_new, key_mn_trans_new = triton_quantize_and_pack_along_last_dim(key_states_full.transpose(2, 3).contiguous(), 
+                                                                                                                            self.group_size, 
+                                                                                                                            self.k_bits)
+                key_states_full = None
+                if key_states_quant_trans is not None:
+                    key_states_quant_trans = torch.cat([key_states_quant_trans, key_states_quant_trans_new], dim=3)
+                    key_scale_trans = torch.cat([key_scale_trans, key_scale_trans_new], dim=3)
+                    key_mn_trans = torch.cat([key_mn_trans, key_mn_trans_new], dim=3)
+                else:
+                    key_states_quant_trans = key_states_quant_trans_new
+                    key_scale_trans = key_scale_trans_new
+                    key_mn_trans = key_mn_trans_new
+
+            if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
+                raise ValueError(
+                    f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
+                    f" {attn_weights.size()}"
+                )
+
+            if attention_mask is not None:
+                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                    raise ValueError(
+                        f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+                    )
+                attn_weights = attn_weights + attention_mask
+                attn_weights = torch.max(
+                    attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min)
+                )
+
+            # upcast attention to fp32
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+
+            value_states_full = torch.cat([value_states_full, value_states], dim=2)
+            value_full_length = value_states_full.shape[-2]
+            if value_states_quant is None:
+                attn_output = torch.matmul(attn_weights, value_states_full)
+            else:
+                attn_output = cuda_bmm_fA_qB_outer(self.group_size, attn_weights[:, :, :, :-value_full_length], value_states_quant, 
+                                                value_scale, value_mn, self.v_bits)
+                attn_output += torch.matmul(attn_weights[:, :, :, -value_full_length:], value_states_full)
+            attn_output = attn_output.transpose(1, 2).contiguous()
+            if value_full_length > self.residual_length:
+                assert value_full_length == self.residual_length + 1
+                value_states_quant_new, scale, mn = triton_quantize_and_pack_along_last_dim(value_states_full[:, :, :1, :].contiguous(), 
+                                                                                                self.group_size, 
+                                                                                                self.v_bits)
+                value_states_full = value_states_full[:, :, 1:, :].contiguous()
+                if value_states_quant is not None:
+                    value_states_quant = torch.cat([value_states_quant, value_states_quant_new], dim=2)
+                    value_scale = torch.cat([value_scale, scale], dim=2)
+                    value_mn = torch.cat([value_mn, mn], dim=2)
+                else:
+                    value_states_quant = value_states_quant_new
+                    value_scale = scale
+                    value_mn = mn
+
+        else:
+            # print(f"kivi with flash! {self.k_bits}")
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                # Handle the case where the model is quantized
+                if hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+
+                logger.warning_once(
+                    f"The input hidden states seems to be silently casted in float32, this might be related to"
+                    f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                    f" {target_dtype}."
+                )
+
+                query_states = query_states.to(target_dtype)
+                key_states = key_states.to(target_dtype)
+                value_states = value_states.to(target_dtype)
+            attn_output = self._flash_attention_forward(
+                query_states.transpose(1, 2), key_states.transpose(1, 2), 
+                value_states.transpose(1, 2), None, q_len, dropout=0.0
+            )
+            # quantize
+            if key_states.shape[-2] % self.residual_length != 0:
+                if key_states.shape[-2] < self.residual_length:
+                    key_states_quant = None
+                    key_states_full = key_states
+                else:
+                    key_states_quant = key_states[:, :, :-(key_states.shape[-2] % self.residual_length), :].contiguous()
+                    key_states_full = key_states[:, :, -(key_states.shape[-2] % self.residual_length):, :].contiguous()
+            else:
+                key_states_quant = key_states
+                key_states_full = None
+            if key_states_quant is not None:
+                key_states_quant_trans, key_scale_trans, key_mn_trans = triton_quantize_and_pack_along_last_dim(key_states_quant.transpose(2, 3).contiguous(), self.group_size, self.k_bits)
+            else:
+                key_states_quant_trans = None
+                key_scale_trans = None
+                key_mn_trans = None
+            
+            if value_states.shape[-2] <= self.residual_length:
+                value_states_quant = None
+                value_states_full = value_states
+                value_scale = None
+                value_mn = None
+            else:
+                value_states_quant = value_states[:, :, :-self.residual_length, :].contiguous()
+                value_states_full = value_states[:, :, -self.residual_length:, :].contiguous()
+                value_states_quant, value_scale, value_mn = triton_quantize_and_pack_along_last_dim(value_states_quant, 
+                                                                                                self.group_size, 
+                                                                                                self.v_bits)
+
+        past_key_value = (key_states_quant_trans, key_states_full, key_scale_trans, key_mn_trans, 
+                          value_states_quant, value_states_full, value_scale, value_mn, kv_seq_len) if use_cache else None
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+
+        if self.config.pretraining_tp > 1:
+            attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
+            o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
+            attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
+        else:
+            attn_output = self.o_proj(attn_output)
+
+        attn_weights = None
+        return attn_output, attn_weights, past_key_value
+
+
+    def _flash_attention_forward(
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+    ):
+        """
+        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+        first unpad the input, then computes the attention scores and pad the final attention scores.
+
+        Args:
+            query_states (`torch.Tensor`):
+                Input query states to be passed to Flash Attention API
+            key_states (`torch.Tensor`):
+                Input key states to be passed to Flash Attention API
+            value_states (`torch.Tensor`):
+                Input value states to be passed to Flash Attention API
+            attention_mask (`torch.Tensor`):
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
+            dropout (`int`, *optional*):
+                Attention dropout
+            softmax_scale (`float`, *optional*):
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        """
+        # Contains at least one padding token in the sequence
+        if attention_mask is not None:
+            batch_size = query_states.shape[0]
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, attention_mask, query_length
+            )
+
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=softmax_scale,
+                causal=self.is_causal,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        else:
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
+            )
+
+        return attn_output
+
+
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
+            )
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            # The -q_len: slice assumes left padding.
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q,
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
+    
 
 class LlamaDecoderLayer_KIVI(nn.Module):
     def __init__(self, config: LlamaConfig):
@@ -293,8 +591,8 @@ class LlamaDecoderLayer_KIVI(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = (
             LlamaAttention_KIVI(config=config)
-            # if not getattr(config, "_flash_attn_2_enabled", False)
-            # else LlamaFlashAttention2(config=config)
+            if not getattr(config, "use_flash", False)
+            else LlamaFlashAttention_KIVI(config=config)
         )
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
