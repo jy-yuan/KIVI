@@ -6,7 +6,7 @@ Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache
 
 - [2024.04.04]: 🔥🔥We add a new 5-digit [passkey example](./long_context_example.py) with 12k context length to show the performance of 2 bit KiVi under the long context senario.
 
-- [2024.04.04]: We release the code for reproducing our CoQA/TruthfulQA/GSM8K results using LM-Eval. Please check the [README of branch lmeval](https://github.com/jy-yuan/KIVI/tree/lmeval).
+- [2024.04.05]: We release the code for reproducing our CoQA/TruthfulQA/GSM8K results using LM-Eval. Please check the [README of branch lmeval](https://github.com/jy-yuan/KIVI/tree/lmeval).
 
 - [2024.04.04]: (Beta) We add the flash-attention support for KiVi during the prefill phase. 
 
