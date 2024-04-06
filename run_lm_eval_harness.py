@@ -66,6 +66,7 @@ if __name__ == '__main__':
             cache_dir=training_args.cache_dir,
             dtype=dtype,
             low_cpu_mem_usage=low_cpu_mem_usage,
+            batch_size=data_args.batch_size,
             # parallelize=parallel
         )
     else:
@@ -95,7 +96,6 @@ if __name__ == '__main__':
             model=model,
             # model_args='parallelize=True',
             tasks=task_names,
-            batch_size=data_args.batch_size,
             log_samples=True
             # no_cache=True,
             # num_fewshot=data_args.num_fewshot,
