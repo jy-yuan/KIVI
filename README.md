@@ -4,13 +4,13 @@ Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache
 
 ## Updates
 
-- [2024.04.04]: 🔥🔥We add a new 5-digit [passkey example](./long_context_example.py) with 12k context length to show the performance of 2 bit KiVi under the long context senario.
-
 - [2024.04.05]: We release the code for reproducing our CoQA/TruthfulQA/GSM8K results using LM-Eval. Please check the [README of branch lmeval](https://github.com/jy-yuan/KIVI/tree/lmeval).
 
-- [2024.04.04]: (Beta) We add the flash-attention support for KiVi during the prefill phase. 
+- [2024.04.04]: 🔥🔥We add a new 5-digit [passkey example](./long_context_example.py) with 12k context length to show the performance of 2bit KIVI under the long context senario.
 
-- [2024.04.03]: We add a new [5-shot GSM8K example.py](./example.py) to show the performance of 2/4 bit KiVi with 32 full precision tokens.
+- [2024.04.04]: (Beta) We add the flash-attention support for KIVI during the prefill phase. 
+
+- [2024.04.03]: We add a new [5-shot GSM8K example.py](./example.py) to show the performance of 2/4 bit KIVI with 32 full precision tokens.
 
 - [2024.02.05]: KIVI ver. 2 is released on [arXiv](https://arxiv.org/abs/2402.02750).
 
@@ -53,7 +53,7 @@ cd quant && pip install -e .
 
 ### Example
 
-Load model with KiVi: (e.g., Llama-2-7b)
+Load model with KIVI: (e.g., Llama-2-7b)
 
 ```python
 # LLaMA model with KIVI
@@ -87,7 +87,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 # Inference
 # e.g., model.generate(...)
 ```
-We use GSM8K as an example to show how to use KiVi. You can check [example.py](./example.py):
+We use GSM8K as an example to show how to use KIVI. You can check [example.py](./example.py):
 
 ```bash
 python example.py
@@ -113,7 +113,7 @@ If you find our method useful, please kindly cite our paper.
 ```
 
 ## Contributing
-We welcome contributions from the research community to improve the effeicency of KiVi. If you have any idea or would like to report a bug, please open an issue or submit a pull request.
+We welcome contributions from the research community to improve the effeicency of KIVI. If you have any idea or would like to report a bug, please open an issue or submit a pull request.
 
 ## License
 The code is released under the MIT License.
