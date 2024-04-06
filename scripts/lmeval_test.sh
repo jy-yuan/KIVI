@@ -13,7 +13,6 @@ model_name="${model#*/}"
 echo "$model_name"
 CUDA_VISIBLE_DEVICES=$gpuid python run_lm_eval_harness.py --model_name_or_path $model \
     --tasks $tasks \
-    --batch_size 32 \
     --cache_dir ./cached_models \
     --k_bits $k_bits \
     --v_bits $v_bits \

@@ -92,6 +92,8 @@ pip install -e .
 cd ..
 
 # We report TASK in {coqa, truthfulqa_gen, gsm8k} in our paper.
+# If use KIVI implementation, set K_BITS and V_BITS to 2 or 4.
+# If use baseline, set K_BITS and V_BITS to 16.
 bash scripts/lmeval_test.sh {GPU_ID} {K_BITS} {V_BITS} {GROUP_LENGTH} {RESIDUAL_LENGTH} {TASK} {MODEL_NAME}
 ```
 

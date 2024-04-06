@@ -33,18 +33,6 @@ if __name__ == '__main__':
                                             trust_remote_code=True, 
                                             tokenizer_type='llama',
                                             model_max_length=training_args.model_max_length)
-    # elif 'falcon' in model_args.model_name_or_path.lower():
-    #     config = FalconConfig.from_pretrained(model_args.model_name_or_path)
-    #     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, 
-    #                                         use_fast=False, 
-    #                                         trust_remote_code=True,
-    #                                         model_max_length=training_args.model_max_length)
-    # elif 'mistral' in model_args.model_name_or_path.lower():
-    #     config = MistralConfig.from_pretrained(model_args.model_name_or_path)
-    #     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, 
-    #                                         use_fast=True, 
-    #                                         trust_remote_code=True,
-    #                                         model_max_length=training_args.model_max_length)
     else:
         raise NotImplementedError
 
@@ -55,20 +43,32 @@ if __name__ == '__main__':
         parallel = False
         low_cpu_mem_usage=True
     if 'llama' in model_args.model_name_or_path.lower():
-        from models.llama_kivi import LMEvalLlamaForCausalLM_KIVI
+        if model_args.k_bits == 16 and model_args.v_bits == 16:
+            from models.modeling_llama import LMEvalLlamaForCausalLM
+            model = LMEvalLlamaForCausalLM(
+                k_bits=model_args.k_bits,
+                v_bits=model_args.v_bits,
+                group_size=model_args.group_size,
+                residual_length=model_args.residual_length,
+                pretrained=model_args.model_name_or_path,
+                cache_dir=training_args.cache_dir,
+                dtype=dtype,
+                low_cpu_mem_usage=low_cpu_mem_usage,
+            )
+        else:
+            assert model_args.k_bits in [2, 4] and model_args.v_bits in [2, 4]
+            from models.llama_kivi import LMEvalLlamaForCausalLM_KIVI
 
-        model = LMEvalLlamaForCausalLM_KIVI(
-            k_bits=model_args.k_bits,
-            v_bits=model_args.v_bits,
-            group_size=model_args.group_size,
-            residual_length=model_args.residual_length,
-            pretrained=model_args.model_name_or_path,
-            cache_dir=training_args.cache_dir,
-            dtype=dtype,
-            low_cpu_mem_usage=low_cpu_mem_usage,
-            batch_size=data_args.batch_size,
-            # parallelize=parallel
-        )
+            model = LMEvalLlamaForCausalLM_KIVI(
+                k_bits=model_args.k_bits,
+                v_bits=model_args.v_bits,
+                group_size=model_args.group_size,
+                residual_length=model_args.residual_length,
+                pretrained=model_args.model_name_or_path,
+                cache_dir=training_args.cache_dir,
+                dtype=dtype,
+                low_cpu_mem_usage=low_cpu_mem_usage,
+            )
     else:
         raise NotImplementedError
     # model = model.eval().cuda()
@@ -101,10 +101,10 @@ if __name__ == '__main__':
             # num_fewshot=data_args.num_fewshot,
         )
         print(evaluator.make_table(results))
-        samples = results["samples"]
-        filepath = f"./output_samples/{training_args.exp_name}.json"
-        with open(filepath, "w") as f:
-            json.dump(samples, f)
+        # samples = results["samples"]
+        # filepath = f"./output_samples/{training_args.exp_name}.json"
+        # with open(filepath, "w") as f:
+        #     json.dump(samples, f)
         # if data_args.output_path is not None:
         #     os.makedirs(os.path.dirname(data_args.output_path), exist_ok=True)
         #     # otherwise cannot save
