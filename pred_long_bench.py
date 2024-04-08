@@ -6,23 +6,15 @@ from tqdm import tqdm
 import numpy as np
 import random
 import argparse
-
 os.environ["WANDB_DISABLED"] = "true"
 
 from utils.process_args import process_args
 from transformers import LlamaConfig, FalconConfig, MptConfig, MistralConfig, AutoTokenizer
 
-import deepspeed
-
-def parse_args(args=None):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default=None, choices=["llama2-7b-chat-4k", "longchat-v1.5-7b-32k", "xgen-7b-8k", "internlm-7b-8k", "chatglm2-6b", "chatglm2-6b-32k", "vicuna-v1.5-7b-16k"])
-    parser.add_argument('--e', action='store_true', help="Evaluate on LongBench-E")
-    return parser.parse_args(args)
 
 # This is the customized building prompt for chat models
 def build_chat(tokenizer, prompt, model_name):
-    if "llama" in model_name:
+    if "llama" in model_name.lower():
         prompt = f"[INST]{prompt}[/INST]"
     else:
         raise NotImplementedError
@@ -112,7 +104,7 @@ if __name__ == '__main__':
         config.v_bits = model_args.v_bits
         config.group_size = model_args.group_size
         config.residual_length = model_args.residual_length
-        
+        config.use_flash = True # Note: We activate the flashattention to speed up the inference
         model = LlamaForCausalLM_KIVI.from_pretrained(
             pretrained_model_name_or_path=model_args.model_name_or_path,
             config=config,
