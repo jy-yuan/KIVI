@@ -1,5 +1,7 @@
 # More results on LongBench
 
+From the results, for vanilla multihead attention models, we recommend using KIVI-2, which can maintain the performance of the full-precision model while offering the best efficiency. For multiquery attention or group query attention, since the keys and values are already compressed, we recommend using KIVI-4, which can maintain the performance of the full-precision model in these cases.
+
 ### Table 1: Performance of LongChat-7b-v1.5-32K
 
 The results of LongChat-7b-v1.5-32K on 15 tasks from LongBench. The model has 32K context length. We use a 32 group size and 128 residual length for both KIVI-2 and KIVI-4. The baseline is of full precision.
