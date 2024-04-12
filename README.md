@@ -1,19 +1,18 @@
-# KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache
+# KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache - LMEval branch
 
 Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
 
-## Updates
-- [2024.04.04]: 🔥🔥We add a new 5-digit [passkey example](./long_context_example.py) with 12k context length to show the performance of 2 bit KiVi under the long context senario.
+Use lm-eval to evaluate model on downstream tasks (e.g. GSM8K, Coqa, etc.):
+```bash
+cd lm-evaluation-harness
+pip install -e .
+cd ..
 
-- [2024.04.04]: (Beta) We add the flash-attention support for KiVi during the prefill phase. 
-
-- [2024.04.03]: We add a new [5-shot GSM8K example.py](./example.py) to show the performance of 2/4 bit KiVi with 32 full precision tokens.
-
-- [2024.02.05]: KIVI ver. 2 is released on [arXiv](https://arxiv.org/abs/2402.02750).
-
-- [2024.02.03]: KIVI code is released.
-
-- [2023.12.29]: KIVI ver. 1 is released on [researchgate](https://www.researchgate.net/publication/376831635_KIVI_Plug-and-play_2bit_KV_Cache_Quantization_with_Streaming_Asymmetric_Quantization).
+# We report TASK in {coqa, truthfulqa_gen, gsm8k} in our paper.
+# If use KIVI implementation, set K_BITS and V_BITS to 2 or 4.
+# If use baseline, set K_BITS and V_BITS to 16.
+bash scripts/lmeval_test.sh {GPU_ID} {K_BITS} {V_BITS} {GROUP_LENGTH} {RESIDUAL_LENGTH} {TASK} {MODEL_NAME}
+```
 
 ## Overview
 
@@ -85,19 +84,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 # e.g., model.generate(...)
 ```
 
-Use lm-eval to evaluate model on downstream tasks (e.g. GSM8K, Coqa, etc.):
-```bash
-cd lm-evaluation-harness
-pip install -e .
-cd ..
-
-# We report TASK in {coqa, truthfulqa_gen, gsm8k} in our paper.
-# If use KIVI implementation, set K_BITS and V_BITS to 2 or 4.
-# If use baseline, set K_BITS and V_BITS to 16.
-bash scripts/lmeval_test.sh {GPU_ID} {K_BITS} {V_BITS} {GROUP_LENGTH} {RESIDUAL_LENGTH} {TASK} {MODEL_NAME}
-```
-
-We use GSM8K as an example to show how to use KiVi. You can check [example.py](./example.py):
+We use GSM8K as an example to show how to use KIVI. You can check [example.py](./example.py):
 
 ```bash
 python example.py
@@ -123,7 +110,7 @@ If you find our method useful, please kindly cite our paper.
 ```
 
 ## Contributing
-We welcome contributions from the research community to improve the effeicency of KiVi. If you have any idea or would like to report a bug, please open an issue or submit a pull request.
+We welcome contributions from the research community to improve the effeicency of KIVI. If you have any idea or would like to report a bug, please open an issue or submit a pull request.
 
 ## License
 The code is released under the MIT License.
