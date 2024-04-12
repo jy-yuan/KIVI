@@ -99,6 +99,7 @@ Evaluate KIVI on LongBench:
 
 ```bash
 bash scripts/long_test.sh {GPU_ID} {K_BITS} {V_BITS} {GROUP_LENGTH} {RESIDUAL_LENGTH} {MODEL_NAME}
+python eval_long_bench.py --model {MODEL} # MODEL is the dir name under pred/
 ```
 
 ## Citation
