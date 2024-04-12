@@ -88,31 +88,78 @@ if __name__ == '__main__':
     model_name = model_args.model_name_or_path.split("/")[-1]
     # dtype = torch.bfloat16 if training_args.bf16 else torch.float
     dtype = torch.float16
-    if 'llama' in model_args.model_name_or_path.lower():
+    
+    if 'llama' in model_args.model_name_or_path.lower() or 'longchat' in model_args.model_name_or_path.lower():
         config = LlamaConfig.from_pretrained(model_args.model_name_or_path)
         tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, 
                                             use_fast=False, 
                                             trust_remote_code=True, 
                                             tokenizer_type='llama')
                                             # model_max_length=training_args.model_max_length)
+    elif 'mistral' in model_args.model_name_or_path.lower():
+        config = MistralConfig.from_pretrained(model_args.model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, 
+                                            use_fast=False, 
+                                            trust_remote_code=True)
     else:
         raise NotImplementedError
-    if 'llama' in model_args.model_name_or_path.lower():
-        from models.llama_kivi import LlamaForCausalLM_KIVI
+    
+    if 'llama' in model_args.model_name_or_path.lower() or 'longchat' in model_args.model_name_or_path.lower():
+        if model_args.k_bits < 16 and model_args.v_bits < 16:
+            from models.llama_kivi import LlamaForCausalLM_KIVI
+            config.k_bits = model_args.k_bits
+            config.v_bits = model_args.v_bits
+            config.group_size = model_args.group_size
+            config.residual_length = model_args.residual_length
+            config.use_flash = True # Note: We activate the flashattention to speed up the inference
+            model = LlamaForCausalLM_KIVI.from_pretrained(
+                pretrained_model_name_or_path=model_args.model_name_or_path,
+                config=config,
+                cache_dir=training_args.cache_dir,
+                torch_dtype=dtype,
+                low_cpu_mem_usage=True,
+                device_map="auto",
+            )
+        else:
+            from transformers import LlamaForCausalLM
+            model = LlamaForCausalLM.from_pretrained(
+                pretrained_model_name_or_path=model_args.model_name_or_path,
+                config=config,
+                cache_dir=training_args.cache_dir,
+                torch_dtype=dtype,
+                low_cpu_mem_usage=True,
+                use_flash_attention_2=True,
+                device_map="auto",
+            )
 
-        config.k_bits = model_args.k_bits
-        config.v_bits = model_args.v_bits
-        config.group_size = model_args.group_size
-        config.residual_length = model_args.residual_length
-        config.use_flash = True # Note: We activate the flashattention to speed up the inference
-        model = LlamaForCausalLM_KIVI.from_pretrained(
-            pretrained_model_name_or_path=model_args.model_name_or_path,
-            config=config,
-            cache_dir=training_args.cache_dir,
-            torch_dtype=dtype,
-            low_cpu_mem_usage=True,
-            device_map="auto",
-        )
+    elif 'mistral' in model_args.model_name_or_path.lower():
+        if model_args.k_bits < 16 and model_args.v_bits < 16:
+            from models.mistral_kivi import MistralForCausalLM_KIVI
+            config.k_bits = model_args.k_bits
+            config.v_bits = model_args.v_bits
+            config.group_size = model_args.group_size
+            config.residual_length = model_args.residual_length
+            config.use_flash = True
+            model = MistralForCausalLM_KIVI.from_pretrained(
+                pretrained_model_name_or_path=model_args.model_name_or_path,
+                config=config,
+                cache_dir=training_args.cache_dir,
+                torch_dtype=dtype,
+                low_cpu_mem_usage=True,
+                device_map="auto",
+            )
+        else:
+            from transformers import MistralForCausalLM
+            model = MistralForCausalLM.from_pretrained(
+                pretrained_model_name_or_path=model_args.model_name_or_path,
+                config=config,
+                cache_dir=training_args.cache_dir,
+                torch_dtype=dtype,
+                low_cpu_mem_usage=True,
+                use_flash_attention_2=True,
+                device_map="auto",
+            )
+
     else:
         raise NotImplementedError
 

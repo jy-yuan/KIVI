@@ -1,6 +1,5 @@
+# model e.g.: meta-llama/Llama-2-7b-hf
 
-#meta-llama/Llama-2-7b-chat-hf
-#huggyllama/llama-7b
 gpuid=$1
 k_bits=$2
 v_bits=$3
