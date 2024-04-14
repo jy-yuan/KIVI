@@ -4,7 +4,7 @@ Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache
 
 ## Updates
 
-- [2024.04.12]: We add the support for Mistral model family, also report the performance of LongChat-7b-v1.5-32K and Mistral-7B-Instruct-v0.2 on 15 tasks from LongBench. Please check the [long_bench.md](./docs/long_bench.md) for more details.
+- [2024.04.12]: We add the support for Mistral model family. The performance of LongChat-7b-v1.5-32K and Mistral-7B-Instruct-v0.2 on 15 tasks from LongBench can be found in [long_bench.md](./docs/long_bench.md).
 
 - [2024.04.05]: We release the code for reproducing our CoQA/TruthfulQA/GSM8K results using LM-Eval. Please check the [README of branch lmeval](https://github.com/jy-yuan/KIVI/tree/lmeval).
 
@@ -89,17 +89,28 @@ tokenizer = AutoTokenizer.from_pretrained(
 # Inference
 # e.g., model.generate(...)
 ```
+
+#### GSM8K example
 We use GSM8K as an example to show how to use KIVI. You can check [example.py](./example.py):
 
 ```bash
 python example.py
 ```
 
-Evaluate KIVI on LongBench:
+#### Passkey retrieval example
+
+Passkey retrieval with KIVI. You can check [long_context_example.py](./long_context_example.py):
 
 ```bash
+python long_context_example.py
+```
+
+#### Evaluate KIVI on LongBench
+
+We currently support Llama and Mistral family of models. We recently test KIVI on Mistral-7B-Instruct-v0.2 and Longchat-7b-v1.5-32k. Please check [long_bench.md](./docs/long_bench.md) for more details.
+```bash
 bash scripts/long_test.sh {GPU_ID} {K_BITS} {V_BITS} {GROUP_LENGTH} {RESIDUAL_LENGTH} {MODEL_NAME}
-python eval_long_bench.py --model {MODEL} # MODEL is the dir name under pred/
+python eval_long_bench.py --model {MODEL} # MODEL is the dir name under pred/ Currently it support Llama family model and Mistral model.
 ```
 
 ## Citation
