@@ -9,15 +9,27 @@ import argparse
 os.environ["WANDB_DISABLED"] = "true"
 
 from utils.process_args import process_args
-from transformers import LlamaConfig, FalconConfig, MptConfig, MistralConfig, AutoTokenizer
+from transformers import LlamaConfig, MistralConfig, AutoTokenizer
 
 
 # This is the customized building prompt for chat models
 def build_chat(tokenizer, prompt, model_name):
-    if "llama" in model_name.lower():
-        prompt = f"[INST]{prompt}[/INST]"
-    else:
-        raise NotImplementedError
+    # For results in KIVI paper (Llama, Llama-Chat, Mistral-7B-v0.1), we do not apply any special treatment to the prompt.
+    # For lmsys/longchat-7b-v1.5-32k and mistralai/Mistral-7B-Instruct-v0.2, we need to rewrite the prompt a little bit.
+    if "longchat" in model_name.lower():
+        from fastchat.model import get_conversation_template
+        conv = get_conversation_template("vicuna")
+        conv.append_message(conv.roles[0], prompt)
+        conv.append_message(conv.roles[1], None)
+        prompt = conv.get_prompt()
+    elif "mistral-v0.2-instruct" in model_name.lower():
+        messages = [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     return prompt
 
 def post_process(response, model_name):
