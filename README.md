@@ -75,7 +75,7 @@ model = LlamaForCausalLM_KIVI.from_pretrained(
     pretrained_model_name_or_path='meta-llama/Llama-2-7b-hf',
     config=config,
     cache_dir=CACHE_DIR,
-    torch_dtype=dtype,
+    torch_dtype=torch.float16,
     low_cpu_mem_usage=True,
     device_map="auto",
 )
@@ -127,7 +127,7 @@ If you find our method useful, please kindly cite our paper.
 ```
 
 ## Contributing
-We welcome contributions from the research community to improve the effeicency of KIVI. If you have any idea or would like to report a bug, please open an issue or submit a pull request.
+We welcome contributions from the research community to improve KIVI. If you have any idea or would like to report a bug, please open an issue or submit a pull request.
 
 ## License
 The code is released under the MIT License.
