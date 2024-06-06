@@ -175,42 +175,6 @@ def _minmax_along_last_dim(
 	# tl.device_print('shape', mn_val[:, None].shape)
 	tl.store(mn_ptr+offsets_b, mn_val, mask=offsets_b<N*num_groups)
 	tl.store(mx_ptr+offsets_b, mx_val, mask=offsets_b<N*num_groups)
-
-
-# def triton_quantize_and_pack_along_last_dim(data: torch.Tensor, group_size: int, bit: int):
-# 	assert len(data.shape) == 4
-# 	shape = data.shape
-# 	B, nh, D, T = shape
-# 	# ================== Get Scale & Zeros ===============
-# 	assert T % group_size == 0
-# 	num_groups = T // group_size
-# 	new_shape = (B * nh * D, num_groups, group_size)
-# 	scale_mn_shape = B, nh, D, num_groups
-# 	# Quantize
-# 	max_int = 2 ** bit - 1
-# 	data = data.view(new_shape)
-# 	mn = torch.min(data, dim=-1, keepdim=True)[0]
-# 	mx = torch.max(data, dim=-1, keepdim=True)[0]
-# 	# B, nh, D, T // group_size, 1
-# 	scale = (mx - mn) / max_int
-# 	data = data - mn
-# 	data.div_(scale)
-# 	data = data.clamp_(0, max_int).round_().to(torch.int32)
-# 	scale, mn = scale.squeeze(-1), mn.squeeze(-1)
-# 	data = data.view(-1, T)
-# 	feat_per_int = 32 // bit
-# 	packshape = (np.prod(shape[:-1]), shape[-1] // feat_per_int,)
-# 	code = torch.zeros(*packshape, device=data.device, dtype=torch.int32)
-# 	if B <= 4:
-# 		BLOCK_SIZE_N = 32
-# 	else:
-# 		BLOCK_SIZE_N = 128
-# 	grid = lambda meta: (triton.cdiv(data.shape[0], BLOCK_SIZE_N), data.shape[1] // feat_per_int,)
-# 	_pack_along_last_dim[grid](bit, data, code, data.shape[0], 
-# 								data.shape[1], feat_per_int, 
-# 								BLOCK_SIZE_N=BLOCK_SIZE_N, 
-# 								num_warps=8)
-# 	return code.view(B, nh, D, -1), scale.view(scale_mn_shape), mn.view(scale_mn_shape)
 	
 	
 
@@ -247,5 +211,34 @@ def triton_quantize_and_pack_along_last_dim(data: torch.Tensor, group_size: int,
 								data.shape[1], feat_per_int, 
 								BLOCK_SIZE_N=BLOCK_SIZE_N, 
 								num_warps=8)
-	return code.view(B, nh, D, -1), scale.reshape(scale_mn_shape), mn.reshape(scale_mn_shape)
-	
+	return code.view(B, nh, D, -1), scale.view(scale_mn_shape), mn.view(scale_mn_shape)
+
+
+
+def triton_pack_along_last_dim(data: torch.Tensor, 
+							   mn: torch.Tensor,
+							   scale: torch.Tensor,
+							   group_size: int, bit: int):
+	assert len(data.shape) == 4
+	shape = data.shape
+	B, nh, D, T = shape
+	# ================== Get Scale & Zeros ===============
+	assert T % group_size == 0
+	num_groups = T // group_size
+	new_shape = (B, nh, D, num_groups, group_size)
+	# Quantize
+	data = data.reshape(new_shape)
+	data = data - mn.unsqueeze(-1)
+	data.div_(scale.unsqueeze(-1))
+	data = data.clamp_(0, 2 ** bit - 1).round_().to(torch.int32)
+	data = data.reshape(-1, T)
+	feat_per_int = 32 // bit
+	packshape = (np.prod(shape[:-1]), shape[-1] // feat_per_int,)
+	code = torch.zeros(*packshape, device=data.device, dtype=torch.int32)
+	BLOCK_SIZE_N = 128
+	grid = lambda meta: (triton.cdiv(data.shape[0], BLOCK_SIZE_N), data.shape[1] // feat_per_int,)
+	_pack_along_last_dim[grid](bit, data, code, data.shape[0], 
+								data.shape[1], feat_per_int, 
+								BLOCK_SIZE_N=BLOCK_SIZE_N, 
+								num_warps=8)
+	return code.view(B, nh, D, -1)

@@ -1,5 +1,4 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
 os.environ["CUDA_LAUNCH_BLOCKING"]="1"
 import numpy as np
 import torch
@@ -11,7 +10,7 @@ from new_pack import pack_tensor
 from timeit_v2 import py_benchmark
 import kivi_gemv
 
-B, nh, IC, OC = 8, 32, 739, 128
+B, nh, IC, OC = 1, 32, 320, 128
 
 @triton.jit
 def gemv_kernel_g64(inputs_ptr, qw_ptr, mn_ptr, 
@@ -110,14 +109,10 @@ def test_bgemv_outer_correct_mha():
 		weight = weight.clamp_(0, maxq).round_().to(torch.int32)
 		weight = weight.view(flatten_B, IC, OC)
 		qweight = pack_tensor(weight, BIT, 2)
-		weight = weight.transpose(1, 2).contiguous()
-		qweight = qweight.transpose(1, 2).contiguous()
-		scale = scale.transpose(1, 2).contiguous()
-		mn = mn.transpose(1, 2).contiguous()
 		output = kivi_gemv.gemv_forward_cuda_outer_dim(inp, qweight, scale, mn, BIT, GS, nh, False)
-		deq_w = dequant_weight_outer(weight.transpose(1, 2), 
-							   scale.transpose(1, 2), 
-							   mn.transpose(1, 2), GS)
+		deq_w = dequant_weight_outer(weight, 
+							   scale, 
+							   mn, GS)
 		# rel_error = torch.abs((deq_w - ori_weight).float() / (ori_weight + 1e-5).float()).mean()
 		# print(f'bit {BIT} avg rel weight quant error: {rel_error}')
 		output_ref = inp @ deq_w
@@ -146,15 +141,10 @@ def test_bgemv_outer_correct_mqa():
 		weight = weight.clamp_(0, maxq).round_().to(torch.int32)
 		weight = weight.view(B, IC, OC)
 		qweight = pack_tensor(weight, BIT, 2)
-		inp = inp.contiguous()
-		weight = weight.transpose(1, 2).contiguous()
-		qweight = qweight.transpose(1, 2).contiguous()
-		scale = scale.transpose(1, 2).contiguous()
-		mn = mn.transpose(1, 2).contiguous()
 		output = kivi_gemv.gemv_forward_cuda_outer_dim(inp, qweight, scale, mn, BIT, GS, nh, True)
-		deq_w = dequant_weight_outer(weight.transpose(1, 2), 
-							   scale.transpose(1, 2), 
-							   mn.transpose(1, 2), GS)
+		deq_w = dequant_weight_outer(weight, 
+							   scale, 
+							   mn, GS)
 		# rel_error = torch.abs((deq_w - ori_weight).float() / (ori_weight + 1e-5).float()).mean()
 		# print(f'bit {BIT} avg rel weight quant error: {rel_error}')
 		output_ref = inp.view(B, nh, 1, IC) @ deq_w.view(B, 1, IC, OC)
@@ -233,7 +223,7 @@ def test_bgemv_outer_speed():
 	inp = torch.randn((B, 1, IC), device='cuda', dtype=torch.float16)
 	ori_weight = torch.randn((B, IC, OC), device='cuda', dtype=torch.float16) 
 	GS = 64
-	for BIT in [2]:
+	for BIT in [2, 4]:
 		weight = ori_weight
 		PACK_FACTOR = 32 // BIT
 		assert OC % GS == 0 and OC % PACK_FACTOR == 0
@@ -248,20 +238,16 @@ def test_bgemv_outer_speed():
 		weight = weight.clamp_(0, maxq).round_().to(torch.int32)
 		weight = weight.view(B, IC, OC)
 		qweight = pack_tensor(weight, BIT, 2)
-		weight = weight.transpose(1, 2).contiguous()
-		qweight = qweight.transpose(1, 2).contiguous()
-		scale = scale.transpose(1, 2).contiguous()
-		mn = mn.transpose(1, 2).contiguous()
-		deq_w = dequant_weight_outer(weight.transpose(1, 2), 
-							scale.transpose(1, 2), 
-							mn.transpose(1, 2), GS)
+		deq_w = dequant_weight_outer(weight, 
+							scale, 
+							mn, GS)
 		stmt = "inp @ deq_w"
 		t_ref = py_benchmark(stmt, {**globals(), **locals()}, min_repeat_second=1,
 										setup="torch.cuda.synchronize()", finish="torch.cuda.synchronize()")
 		# stmt = "gemv_fwd(BIT, GS, inp, qweight, mn, scale)"
 		# t_our = py_benchmark(stmt, {**globals(), **locals()}, min_repeat_second=1,
 		#                                  setup="torch.cuda.synchronize()", finish="torch.cuda.synchronize()")
-		stmt = "kivi_gemv.gemv_forward_cuda_outer_dim(inp, qweight, scale, mn, BIT, GS)"
+		stmt = "kivi_gemv.gemv_forward_cuda_outer_dim(inp, qweight, scale, mn, BIT, GS, nh, False)"
 		t_our = py_benchmark(stmt, {**globals(), **locals()}, min_repeat_second=1,
 										setup="torch.cuda.synchronize()", finish="torch.cuda.synchronize()")
 		print(f'BS {B} IC {IC} OC {OC} pytorch batched gemv: {t_ref * 1000} ms')
@@ -272,7 +258,7 @@ if __name__ == "__main__":
 	np.random.seed(0)
 	random.seed(0)
 	# test_gemv_correct()
-	test_bgemv_outer_correct_mha()
-	test_bgemv_outer_correct_mqa()
+	# test_bgemv_outer_correct_mha()
+	# test_bgemv_outer_correct_mqa()
 	# test_gemv_speed()
-	# test_bgemv_outer_speed()
+	test_bgemv_outer_speed()

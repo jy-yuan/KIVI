@@ -270,6 +270,8 @@ __global__ void bgemv4_kernel_outer_dim(
     const int packed_oc_idx = blockIdx.y * blockDim.y + threadIdx.y; 
     const int oc_start_idx = packed_oc_idx * pack_factor;
     const int group_idx = oc_start_idx / group_size; 
+    const int ng = OC / group_size;
+    const int np = OC / pack_factor;
     const half* inputs = _inputs + batch_idx * IC;
     half* outputs = _outputs + batch_idx * OC;
     int _batch_idx;
@@ -292,15 +294,15 @@ __global__ void bgemv4_kernel_outer_dim(
       half czero[4]{};
       half inp[4]{};
       // each thread load 32 int4 number
-      int weight_offset = packed_oc_idx * ICR + k * TILE_DIM + threadIdx.x*4;
-      int scale_mn_offset = group_idx * ICR + k * TILE_DIM + threadIdx.x*4;
+      int weight_offset = packed_oc_idx + (k * TILE_DIM + threadIdx.x*4) * np;
+      int scale_mn_offset = group_idx + (k * TILE_DIM + threadIdx.x*4) * ng;
       int inputs_ptr_delta = k * TILE_DIM + threadIdx.x * 4; 
       for (int i=0; i<4; i++){
-        if (weight_offset + i < OC * ICR / pack_factor)
-          qw[i] = *(weight + weight_offset + i);
-        if (scale_mn_offset + i < OC * ICR / group_size){
-          cscale[i] = *(scaling_factors + scale_mn_offset + i);
-          czero[i] = *(zeros + scale_mn_offset + i);}
+        if (weight_offset + i * np < OC * ICR / pack_factor)
+          qw[i] = *(weight + weight_offset + i * np);
+        if (scale_mn_offset + i * ng < OC * ICR / group_size){
+          cscale[i] = *(scaling_factors + scale_mn_offset + i * ng);
+          czero[i] = *(zeros + scale_mn_offset + i * ng);}
         if (inputs_ptr_delta + i < ICR)
           inp[i] = *(inputs + inputs_ptr_delta + i);
       }
@@ -347,7 +349,10 @@ __global__ void bgemv4_kernel_outer_dim(
     }
 }
 
-
+  // _in_feats: tensor of shape [B, IC];
+  // _weight: int tensor of shape [B, IC, OC // PACK_Factor,];
+  // _zeros: int tensor of shape [B, IC, OC // G,];
+  // _scaling_factors: tensor of shape [B, IC, OC // G,];
 __global__ void bgemv2_kernel_outer_dim(
   const half* _inputs, const uint32_t* _weight, const half* _zeros, const half* _scale, half* _outputs, 
   const int IC, const int OC, const int group_size, const int nh, const bool mqa){
@@ -359,6 +364,8 @@ __global__ void bgemv2_kernel_outer_dim(
     const int oc_start_idx = packed_oc_idx * pack_factor;
     const int group_idx = oc_start_idx / group_size; 
     const int ICR = IC;
+    const int ng = OC / group_size;
+    const int np = OC / pack_factor;
     const half* inputs = _inputs + batch_idx * ICR;
     half* outputs = _outputs + batch_idx * OC;
     int _batch_idx;
@@ -380,15 +387,15 @@ __global__ void bgemv2_kernel_outer_dim(
       half czero[4]{};
       half inp[4]{};
       // each thread load 32 int4 number
-      int weight_offset = packed_oc_idx * ICR + k * TILE_DIM + threadIdx.x*4;
-      int scale_mn_offset = group_idx * ICR + k * TILE_DIM + threadIdx.x*4;
+      int weight_offset = packed_oc_idx + (k * TILE_DIM + threadIdx.x*4) * np;
+      int scale_mn_offset = group_idx + (k * TILE_DIM + threadIdx.x*4) * ng;
       int inputs_ptr_delta = k * TILE_DIM + threadIdx.x * 4; 
       for (int i=0; i<4; i++){
-        if (weight_offset + i < OC * ICR / pack_factor)
-          qw[i] = *(weight + weight_offset + i);
-        if (scale_mn_offset + i < OC * ICR / group_size){
-          cscale[i] = *(scaling_factors + scale_mn_offset + i);
-          czero[i] = *(zeros + scale_mn_offset + i);}
+        if (weight_offset + i * np < OC * ICR / pack_factor)
+          qw[i] = *(weight + weight_offset + i * np);
+        if (scale_mn_offset + i * ng < OC * ICR / group_size){
+          cscale[i] = *(scaling_factors + scale_mn_offset + i * ng);
+          czero[i] = *(zeros + scale_mn_offset + i * ng);}
         if (inputs_ptr_delta + i < ICR)
           inp[i] = *(inputs + inputs_ptr_delta + i);
       }
@@ -528,7 +535,7 @@ torch::Tensor gemv_forward_cuda_outer_dim(
     int BS = _in_feats.size(0);
     int num_in_feats = _in_feats.size(1);
     int num_in_channels = _in_feats.size(2);
-    int num_out_channels = _zeros.size(1) * group_size;
+    int num_out_channels = _zeros.size(2) * group_size;
     // int kernel_volume = _out_in_map.size(1);
     auto in_feats = reinterpret_cast<half*>(_in_feats.data_ptr<at::Half>());
     auto kernel = reinterpret_cast<uint32_t*>(_kernel.data_ptr<int>());
