@@ -514,6 +514,8 @@ class LlamaFlashAttention_KIVI(LlamaAttention_KIVI):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
+        from flash_attn import flash_attn_func, flash_attn_varlen_func
+
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
