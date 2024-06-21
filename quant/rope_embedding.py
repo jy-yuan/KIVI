@@ -209,7 +209,8 @@ def fused_rope_and_quant(Q, K, V, cos, sin, position_ids, k_bit, v_bit, group_si
     # assert torch.allclose(v_scale_ref, V_scale)
     return Q.view(batch, q_seq_len, n_heads, head_dim).transpose(1, 2), \
         K.view(batch, k_seq_len, n_heads, head_dim).transpose(1, 2), \
-        V_mn.transpose(1, 2).contiguous(), V_scale.transpose(1, 2).contiguous()
+        V_mn.transpose(1, 2).contiguous(), \
+        V_scale.transpose(1, 2).contiguous()
 
 
 def fast_rope_ref(Q, cos, sin, position_ids):
@@ -274,7 +275,7 @@ if __name__ == "__main__":
     V = torch.randn(BS, SL, NH, HD).half().cuda().transpose(1, 2)
     cos, sin = rotary_emb(Q, seq_len=SL)
     Q_ref = rope_ref(Q, cos, sin, position_ids)
-    Q_our, K_our = fused_rope_and_quant(Q, K, V, cos, sin, position_ids,BITS, BITS, GS)
+    Q_our, K_our, v_mn, v_scale = fused_rope_and_quant(Q, K, V, cos, sin, position_ids,BITS, BITS, GS)
     # Q_our = fused_K_rope_ref(Q, cos, sin, position_ids)
     diff = ((Q_ref - Q_our) / Q_ref).abs()
     assert not Q_ref.isnan().any()
