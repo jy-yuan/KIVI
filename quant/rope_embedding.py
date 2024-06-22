@@ -12,6 +12,16 @@ ROPE_GROUP_SIZE = 4
 
 
 def calculate_settings(n):
+    """
+    Calculate the blocksize and number of warps required for triton kernels
+
+    Args:
+        n: head dimension
+
+    Returns:
+        BLOCK_SIZE
+        num_warps
+    """
     BLOCK_SIZE = next_power_of_2(n)
     if BLOCK_SIZE > MAX_FUSED_SIZE:
         raise RuntimeError(f"Cannot launch Triton kernel since n = {n} exceeds "\
@@ -31,6 +41,20 @@ def rotate_half(x):
 
 
 def rope_ref(q, cos, sin, position_ids, unsqueeze_dim=1):
+    """
+    Apply RoPE to the {Q, K} matrix using the efficient method mentioned in the 
+    RoFormer paper
+
+    Args:
+        q: a torch tensor representing {Q, K} matrix 
+        cos: the cos matrix
+        sin: the sin matrix 
+        position_ids
+        unsqueeze_dim
+
+    Returns:
+        The {Q, K} matrix, with RoPE applied
+    """
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
     sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -96,9 +120,8 @@ def _fused_rope_embedding(
     BLOCK_SIZE    : tl.constexpr,
 ):
     """
-        Calculates the RoPE Embedding quickly
-        RoPE is Q * cos + rotate_half(Q) * sin
-        See our blog post for more info
+    Calculate RoPE embedding and KIVI V quantization in one fused kernel. (To
+    reduce kernel launch time)
     """
     row_position = tl.program_id(0)
     sid = tl.program_id(1)
@@ -267,6 +290,8 @@ if __name__ == "__main__":
     BS, NH, SL, HD = 1, 32, 4096, 128
     GS = 32
     BITS = 2
+
+    # Create embedding and Q, K, V
     position_ids = torch.arange(SL).unsqueeze(0).cuda()
     from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
     rotary_emb = LlamaRotaryEmbedding(dim=HD,max_position_embeddings=SL, base=50000).cuda()
@@ -274,12 +299,21 @@ if __name__ == "__main__":
     K = torch.randn(BS, SL, NH, HD).half().cuda().transpose(1, 2)
     V = torch.randn(BS, SL, NH, HD).half().cuda().transpose(1, 2)
     cos, sin = rotary_emb(Q, seq_len=SL)
+
     Q_ref = rope_ref(Q, cos, sin, position_ids)
+    K_ref = rope_ref(K, cos, sin, position_ids)
     Q_our, K_our, v_mn, v_scale = fused_rope_and_quant(Q, K, V, cos, sin, position_ids,BITS, BITS, GS)
     # Q_our = fused_K_rope_ref(Q, cos, sin, position_ids)
+
+    # Verify Q Result
     diff = ((Q_ref - Q_our) / Q_ref).abs()
     assert not Q_ref.isnan().any()
     assert not Q_our.isnan().any()
+    # Verify K Result
+    diff_k = ((K_ref - K_our) / K_ref).abs()
+    assert not K_ref.isnan().any()
+    assert not K_our.isnan().any()
+    # Benchmark performance
     stmt = "rope_ref(Q, cos, sin, position_ids)"
     t_ref = py_benchmark(stmt, {**globals(), **locals()}, min_repeat_second=1,
                                      setup="torch.cuda.synchronize()", finish="torch.cuda.synchronize()")
