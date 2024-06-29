@@ -122,6 +122,16 @@ def _fused_rope_embedding(
     """
     Calculate RoPE embedding and KIVI V quantization in one fused kernel. (To
     reduce kernel launch time)
+    
+    Args:
+        Q,K,V: Shape: BS, SL, NH * HD
+
+    Effect: 
+        - Applies RoPE to Q and K in place
+        - Store V's scaling factor in V_scale
+        - Store V's min value in V_mn
+        - Store K's scaling factor in K_scale
+        - Store K's min value in K_mn
     """
     row_position = tl.program_id(0)
     sid = tl.program_id(1)
@@ -191,6 +201,27 @@ def get_mi_scale_ref(x, group_size, num_heads, bits):
 
 
 def fused_rope_and_quant(Q, K, V, cos, sin, position_ids, k_bit, v_bit, group_size):
+    """
+    Apply RoPE, and calculate min and scale in a single kernel.
+    Min and scale are later used for quantization.
+
+    Args:
+        Q,K,V: The {Q, K, V} matrices (shape: BS, NH, SL, HD)
+        cos: The cos matrix
+        sin: The sin matrix
+        position_ids: The position ids
+        k_bit: The number of bits to quantize K
+        v_bit: The number of bits to quantize V
+        group_size: The group size for quantization
+    
+    Returns:
+        Q: Q matrix with RoPE applied (shape: # BS, NH, SL, HD)
+        K: K Matrix with RoPE applied (shape: # BS, NH, SL, HD)
+        V_mn: The min value of V (shape: # BS, NH, SL, HD//group_size)
+        V_scale: The scale of V (shape: # BS, NH, SL, HD//group_size)
+        K_mn: The min value of K (shape: # BS, NH, SL//group_size, HD)
+        K_scale: The scale of K (shape: # BS, NH, SL//group_size, HD)
+    """
     # Q = [Q1, Q2]
     # rope(Q) = [Q1 * cos - sin * Q2, Q2 * cos + sin * Q1]
     Q = Q.transpose(1, 2)
