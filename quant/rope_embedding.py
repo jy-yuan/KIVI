@@ -110,9 +110,11 @@ def _fused_rope_embedding(
     cos, cos_row_stride,
     sin, sin_row_stride,
     total_V_elements: tl.constexpr,
+    total_K_elements: tl.constexpr,
     seqlen: tl.constexpr,
     group_size: tl.constexpr,
     V_scale, V_mn,
+    K_scale, K_mn,
     k_bit        : tl.constexpr,
     v_bit        : tl.constexpr,
     head_dim      : tl.constexpr,
@@ -184,6 +186,34 @@ def _fused_rope_embedding(
         tl.store(V_mn+offset_v_mn_scale+i, mn_val, mask=offset_v_mn_scale<total_V_elements//group_size-i)
         scale = (mx_val - mn_val) / (2 ** v_bit - 1)
         tl.store(V_scale+offset_v_mn_scale+i, scale, mask=offset_v_mn_scale<total_V_elements//group_size-i)
+    # Calculate K scale and mn
+    ok_base = row_position*K_b_stride + seq_len_position[:, None]*K_s_stride + head_position*head_dim
+    # ok_base points to a tensor of shape [group_size, head_dim]
+    for i in range(head_dim):
+        # Get mn and scale for each channel (head dim)
+        offsets_K = ok_base + i
+        cK = tl.load(K + offsets_K, mask=offsets_K<total_K_elements)
+        mx_val = tl.max(cK)
+        mn_val = tl.min(cK)
+        offset_k_mn_scale = row_position * Q_b_stride // group_size + \
+                            sid * Q_s_stride  + \
+                            head_position * head_dim
+        
+        if (((i == 0 and row_position == 0) and sid == 0) and head_position == 0):
+            tl.device_print("offsets_K", offsets_K)
+            tl.device_print("ok_base", ok_base)
+            tl.device_print("ck", cK)
+            tl.device_print("mn_val", mn_val)
+        if (((i == 1 and row_position == 0) and sid == 0) and head_position == 0):
+            tl.device_print("offsets_K", offsets_K)
+            tl.device_print("ok_base", ok_base)
+            tl.device_print("ck", cK)
+            tl.device_print("mn_val", mn_val)
+            
+        tl.store(K_mn+offset_k_mn_scale+i, mn_val, mask=offset_k_mn_scale<total_K_elements//group_size-i)
+        scale = (mx_val - mn_val) / (2 ** k_bit - 1)
+        tl.store(K_scale+offset_k_mn_scale+i, scale, mask=offset_k_mn_scale<total_K_elements//group_size-i)
+        
         
         
 def get_mi_scale_ref(x, group_size, num_heads, bits):
@@ -196,8 +226,34 @@ def get_mi_scale_ref(x, group_size, num_heads, bits):
     mi = mi.view(bs, seqlen, num_heads, ng//num_heads)
     mx = mx.view(bs, seqlen, num_heads, ng//num_heads)
     scale = (mx - mi) / (2 ** bits - 1)
-
     return mi, scale
+
+def get_k_mi_scale_ref(x, group_size, num_heads, bits):
+    """
+    Get min and scale for K for along hidden channel 
+
+    Args:
+        x: The K matrix (shape: BS, SL, hidden_size (NH * HD))
+        group_size: The group size
+        num_heads: The number of heads
+        bits: The number of bits to quantize K
+    
+    Returns:
+        K_mn: The min value of K (shape: BS, SL//group_size(NG), NH, HD)
+        K_scale: The scale of K  (shape: BS, SL//group_size(NG), NH, HD)
+    """
+    assert len(x.shape) == 3
+    bs, seqlen, hidden_size = x.shape
+    assert seqlen % group_size == 0, print(seqlen, group_size)
+    ng = seqlen // group_size
+    # (BS, SL, NH * HD) -> (BS, NH*HD, SL) -> (BS, NH * HD, NG, GS)
+    x = x.transpose(1,2).view(bs, hidden_size, ng, group_size)
+    mi, mx = x.min(dim=-1).values, x.max(dim=-1).values
+    mi = mi.view(bs, num_heads, hidden_size//num_heads, ng)
+    mx = mx.view(bs, num_heads, hidden_size//num_heads, ng)
+    scale = (mx - mi) / (2 ** bits - 1)
+    # BS, NH, HD, SL//group_size(NG) -> BS, SL//group_size(NG), NH, HD
+    return mi.permute(0,3,1,2), scale.permute(0,3,1,2)
 
 
 def fused_rope_and_quant(Q, K, V, cos, sin, position_ids, k_bit, v_bit, group_size):
@@ -225,7 +281,7 @@ def fused_rope_and_quant(Q, K, V, cos, sin, position_ids, k_bit, v_bit, group_si
     # Q = [Q1, Q2]
     # rope(Q) = [Q1 * cos - sin * Q2, Q2 * cos + sin * Q1]
     Q = Q.transpose(1, 2)
-    K = K.transpose(1, 2)
+    K = K.transpose(1, 2) # BS, SL, NH, HD
     V = V.transpose(1, 2)
     if position_ids is not None:
         # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
@@ -237,13 +293,15 @@ def fused_rope_and_quant(Q, K, V, cos, sin, position_ids, k_bit, v_bit, group_si
     batch, q_seq_len, n_heads, head_dim = Q.shape
     k_seq_len, v_seq_len = K.shape[1], V.shape[1]
     Q = Q.view(batch, q_seq_len, n_heads*head_dim)
-    K = K.view(batch, k_seq_len, n_heads*head_dim)
+    K = K.view(batch, k_seq_len, n_heads*head_dim) # BS, SL, NH * HD
     V = V.view(batch, v_seq_len, n_heads*head_dim)
     assert(q_seq_len <= cos.shape[0])
     BLOCK_SIZE, num_warps = calculate_settings(head_dim)
     assert head_dim % group_size == 0
     V_scale = torch.empty((batch, v_seq_len, n_heads, head_dim//group_size), device=V.device, dtype=V.dtype)
     V_mn = torch.empty((batch, v_seq_len, n_heads, head_dim//group_size), device=V.device, dtype=V.dtype)
+    K_scale = torch.empty((batch, k_seq_len//group_size, n_heads, head_dim), device=K.device, dtype=K.dtype)
+    K_mn = torch.empty((batch, k_seq_len//group_size, n_heads, head_dim), device=K.device, dtype=K.dtype)
     _fused_rope_embedding[(batch, triton.cdiv(q_seq_len, group_size), n_heads)](
         Q, K, V, 
         Q.stride(0), Q.stride(1),
@@ -252,19 +310,28 @@ def fused_rope_and_quant(Q, K, V, cos, sin, position_ids, k_bit, v_bit, group_si
         cos, cos.stride(0),
         sin, sin.stride(0),
         V.numel(),
+        K.numel(),
         q_seq_len, group_size, 
-        V_scale, V_mn, k_bit, v_bit,
+        V_scale, V_mn, K_scale, K_mn,
+        k_bit, v_bit,
         head_dim, n_heads,
         BLOCK_SIZE = BLOCK_SIZE,
         num_warps  = num_warps,
     )
     # v_mi_ref, v_scale_ref = get_mi_scale_ref(V, group_size, n_heads, v_bit)
     # assert torch.allclose(v_mi_ref, V_mn)
-    # assert torch.allclose(v_scale_ref, V_scale)
+    # assert torch.allclose(v_scale_ref, V_scale, atol=1e-2)
+    
+    # k_mn_ref, k_scale_ref = get_k_mi_scale_ref(K, group_size, n_heads, k_bit)
+    # assert torch.allclose(k_mn_ref, K_mn, atol=1e-4)
+    # assert torch.allclose(k_scale_ref, K_scale, atol=1e-2) 
+
     return Q.view(batch, q_seq_len, n_heads, head_dim).transpose(1, 2), \
         K.view(batch, k_seq_len, n_heads, head_dim).transpose(1, 2), \
         V_mn.transpose(1, 2).contiguous(), \
-        V_scale.transpose(1, 2).contiguous()
+        V_scale.transpose(1, 2).contiguous(), \
+        K_mn.transpose(1, 2).contiguous(), \
+        K_scale.transpose(1, 2).contiguous()
 
 
 def fast_rope_ref(Q, cos, sin, position_ids):
@@ -327,7 +394,7 @@ if __name__ == "__main__":
     from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
     rotary_emb = LlamaRotaryEmbedding(dim=HD,max_position_embeddings=SL, base=50000).cuda()
     Q = torch.randn(BS, SL, NH, HD).half().cuda().transpose(1, 2)
-    K = torch.randn(BS, SL, NH, HD).half().cuda().transpose(1, 2)
+    K = torch.randn(BS, SL, NH, HD).half().cuda().transpose(1, 2) # BS, NH, SL, HD
     V = torch.randn(BS, SL, NH, HD).half().cuda().transpose(1, 2)
     cos, sin = rotary_emb(Q, seq_len=SL)
 
