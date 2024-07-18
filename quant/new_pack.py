@@ -237,8 +237,8 @@ def triton_pack_along_last_dim(data: torch.Tensor,
 
 	Args:
 		data (torch.Tensor): Input tensor of shape (B, nh, D, T)
-		mn (torch.Tensor): Min value of the input tensor
-		scale (torch.Tensor): Scale value of the input tensor
+		mn (torch.Tensor): Min value of the input tensor (B, nh, D, num_groups)
+		scale (torch.Tensor): Scale value of the input tensor (B, nh, D, num_groups)
 		group_size (int): Group size for packing
 		bit (int): Number of bits for quantization
 	
