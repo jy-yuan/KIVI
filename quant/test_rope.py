@@ -38,6 +38,7 @@ if __name__ == '__main__':
     torch.cuda.synchronize()
     torch.set_printoptions(edgeitems=4, linewidth=180, sci_mode=False, precision=6)
 
+    # Assert
     _, _, v_mn_ref = triton_quantize_and_pack_along_last_dim(V, GS, BITS)
     diff_v = (v_mn_ref - v_mn)
     print("diff_V_mn: ", diff_v.max())
@@ -58,7 +59,7 @@ if __name__ == '__main__':
     # Assert K quant
     k_rope_quant = triton_pack_along_last_dim(K_rope.transpose(2,3).contiguous(),
                                               k_mn.transpose(2,3).contiguous(),
-                                              k_scale_ref.transpose(2,3).contiguous(),
+                                              k_scale.transpose(2,3).contiguous(),
                                               GS, 
                                               BITS)
     diff_k_quant = (K_quant_ref - k_rope_quant)

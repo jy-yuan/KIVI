@@ -122,18 +122,18 @@ def _fused_rope_embedding(
     BLOCK_SIZE    : tl.constexpr,
 ):
     """
-    Calculate RoPE embedding and KIVI V quantization in one fused kernel. (To
+    Calculate RoPE embedding and KIVI K, V's min and scale in one fused kernel. (To
     reduce kernel launch time)
     
     Args:
         Q,K,V: Shape: BS, SL, NH * HD
 
     Effect: 
-        - Applies RoPE to Q and K in place
+        - Applies RoPE to Q and K (! IN PLACE !), Then:
         - Store V's scaling factor in V_scale
         - Store V's min value in V_mn
-        - Store K's scaling factor in K_scale
-        - Store K's min value in K_mn
+        - Store K's scaling factor in K_scale (For rotated K)
+        - Store K's min value in K_mn (For rotated K) (without deviding k_bit)
     """
     row_position = tl.program_id(0)
     sid = tl.program_id(1)
@@ -189,33 +189,68 @@ def _fused_rope_embedding(
     # Calculate K scale and mn
     ok_base = row_position*K_b_stride + seq_len_position[:, None]*K_s_stride + head_position*head_dim
     # ok_base points to a tensor of shape [group_size, head_dim]
-    for i in range(head_dim):
-        # Get mn and scale for each channel (head dim)
-        offsets_K = ok_base + i
-        cK = tl.load(K + offsets_K, mask=offsets_K<total_K_elements)
-        mx_val = tl.max(cK)
-        mn_val = tl.min(cK)
-        offset_k_mn_scale = row_position * Q_b_stride // group_size + \
-                            sid * Q_s_stride  + \
-                            head_position * head_dim
+    # for i in range(head_dim):
+    #     # Get mn and scale for each channel (head dim)
+    #     offsets_K = ok_base + i
+    #     cK = tl.load(K + offsets_K, mask=offsets_K<total_K_elements)
+    #     mx_val = tl.max(cK)
+    #     mn_val = tl.min(cK)
+    #     offset_k_mn_scale = row_position * Q_b_stride // group_size + \
+    #                         sid * Q_s_stride  + \
+    #                         head_position * head_dim
         
-        if (((i == 0 and row_position == 0) and sid == 0) and head_position == 0):
-            tl.device_print("offsets_K", offsets_K)
-            tl.device_print("ok_base", ok_base)
-            tl.device_print("ck", cK)
-            tl.device_print("mn_val", mn_val)
-        if (((i == 1 and row_position == 0) and sid == 0) and head_position == 0):
-            tl.device_print("offsets_K", offsets_K)
-            tl.device_print("ok_base", ok_base)
-            tl.device_print("ck", cK)
-            tl.device_print("mn_val", mn_val)
+    #     if (((i == 0 and row_position == 0) and sid == 0) and head_position == 0):
+    #         tl.device_print("offsets_K", offsets_K)
+    #         tl.device_print("ok_base", ok_base)
+    #         tl.device_print("ck", cK)
+    #         tl.device_print("mn_val", mn_val)
+    #     if (((i == 1 and row_position == 0) and sid == 0) and head_position == 0):
+    #         tl.device_print("offsets_K", offsets_K)
+    #         tl.device_print("ok_base", ok_base)
+    #         tl.device_print("ck", cK)
+    #         tl.device_print("mn_val", mn_val)
             
-        tl.store(K_mn+offset_k_mn_scale+i, mn_val, mask=offset_k_mn_scale<total_K_elements//group_size-i)
-        scale = (mx_val - mn_val) / (2 ** k_bit - 1)
-        tl.store(K_scale+offset_k_mn_scale+i, scale, mask=offset_k_mn_scale<total_K_elements//group_size-i)
+    #     tl.store(K_mn+offset_k_mn_scale+i, mn_val, mask=offset_k_mn_scale<total_K_elements//group_size-i)
+    #     scale = (mx_val - mn_val) / (2 ** k_bit - 1)
+    #     tl.store(K_scale+offset_k_mn_scale+i, scale, mask=offset_k_mn_scale<total_K_elements//group_size-i)
         
         
         
+
+
+
+
+
+
+
+    k_mx_val_1 = tl.max(K1*cos1 - K2*sin1, axis=0) # 128
+    k_mn_val_1 = tl.min(K1*cos1 - K2*sin1, axis=0)
+    k_mx_val_2 = tl.max(K2*cos1 + K1*sin1, axis=0)
+    k_mn_val_2 = tl.min(K2*cos1 + K1*sin1, axis=0)
+
+    offset_k_mn_scale = row_position * K_b_stride // group_size + \
+                        sid * K_s_stride  + \
+                        head_position * head_dim
+    tl.store(K_mn+half_head_dim*1+offset_k_mn_scale+tl.arange(0, head_dim), 
+                k_mn_val_2, 
+                mask=mask_col)
+    tl.store(K_mn+half_head_dim*0+offset_k_mn_scale+tl.arange(0, head_dim), 
+                k_mn_val_1, 
+                mask=mask_col)
+            #  mask=offset_k_mn_scale+tl.arange(0, head_dim)<total_K_elements//group_size-i)
+
+    k_scale_1 = (k_mx_val_1 - k_mn_val_1)
+    k_scale_2 = (k_mx_val_2 - k_mn_val_2)
+    # k_scale_1 = (k_mx_val_1 - k_mn_val_1) / (2 ** k_bit - 1)
+    # k_scale_2 = (k_mx_val_2 - k_mn_val_2) / (2 ** k_bit - 1)
+    tl.store(K_scale+half_head_dim*0+offset_k_mn_scale+tl.arange(0, head_dim), 
+                k_scale_1, 
+                mask=mask_col)
+                # mask=offset_k_mn_scale+tl.arange(0, head_dim)<total_K_elements//group_size)
+    tl.store(K_scale+half_head_dim*1+offset_k_mn_scale+tl.arange(0, head_dim), 
+                k_scale_2, 
+                mask=mask_col)
+
 def get_mi_scale_ref(x, group_size, num_heads, bits):
     assert len(x.shape) == 3
     bs, seqlen, hidden_size = x.shape
@@ -325,6 +360,7 @@ def fused_rope_and_quant(Q, K, V, cos, sin, position_ids, k_bit, v_bit, group_si
     # k_mn_ref, k_scale_ref = get_k_mi_scale_ref(K, group_size, n_heads, k_bit)
     # assert torch.allclose(k_mn_ref, K_mn, atol=1e-4)
     # assert torch.allclose(k_scale_ref, K_scale, atol=1e-2) 
+    K_scale = K_scale / (2 ** k_bit - 1)
 
     return Q.view(batch, q_seq_len, n_heads, head_dim).transpose(1, 2), \
         K.view(batch, k_seq_len, n_heads, head_dim).transpose(1, 2), \
@@ -370,12 +406,12 @@ def fused_rope_and_quant_prefill(Q, K, V, cos, sin, position_ids, k_bit, v_bit, 
     else:
         v_quant = V[:, :, :-r, :]
         v_full = V[:, :, -r:, :]
-        Q, K, v_mn, v_scale = fused_rope_and_quant(Q, K, v_quant, cos, sin, position_ids, k_bit, v_bit, group_size)
+        Q, K, v_mn, v_scale, k_mn, k_scale= fused_rope_and_quant(Q, K, v_quant, cos, sin, position_ids, k_bit, v_bit, group_size)
         v_quant = triton_pack_along_last_dim(v_quant, 
                                             v_mn, v_scale,
                                             group_size, 
                                             v_bit)
-    return Q, K, v_quant, v_full, v_mn, v_scale
+    return Q, K, v_quant, v_full, v_mn, v_scale, k_mn, k_scale
 
 
 if __name__ == "__main__":
@@ -400,7 +436,7 @@ if __name__ == "__main__":
 
     Q_ref = rope_ref(Q, cos, sin, position_ids)
     K_ref = rope_ref(K, cos, sin, position_ids)
-    Q_our, K_our, v_mn, v_scale = fused_rope_and_quant(Q, K, V, cos, sin, position_ids,BITS, BITS, GS)
+    Q_our, K_our, v_mn, v_scale, _, _ = fused_rope_and_quant(Q, K, V, cos, sin, position_ids,BITS, BITS, GS)
     # Q_our = fused_K_rope_ref(Q, cos, sin, position_ids)
 
     # Verify Q Result
