@@ -49,12 +49,13 @@ if __name__ == '__main__':
 
     # Assert K mn
     diff_k_mn = k_mn_ref - k_mn
-    print(f"diff_K_mn: {diff_k_mn.max()}")
+    print(f"diff_k_mn: {diff_k_mn}")
+    print(f"diff_K_mn: {diff_k_mn.abs().max()}")
 
     # Assert K scale
     diff_k_scale = (k_scale_ref - k_scale)
     print(f"diff_K_scale: {diff_k_scale}")
-    print(f"diff_K_scale: {diff_k_scale.max()}")
+    print(f"diff_K_scale: {diff_k_scale.abs().max()}")
     breakpoint()
     # Assert K quant
     k_rope_quant = triton_pack_along_last_dim(K_rope.transpose(2,3).contiguous(),

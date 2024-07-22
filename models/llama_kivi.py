@@ -160,13 +160,15 @@ class LlamaFlashAttention_KIVI(LlamaAttention_KIVI):
             key_states_quant_trans, key_states_full, key_scale_trans, \
                 key_mn_trans, value_states_quant, value_states_full, value_scale, value_mn = packed
         else:
-            query_states, key_states, value_states_quant, value_states_full, value_mn, value_scale = fused_rope_and_quant_prefill(query_states, 
-                                                                                           key_states, 
-                                                                                           value_states, 
-                                                                                           cos, sin, position_ids, 
-                                                                                           self.k_bits, self.v_bits, 
-                                                                                           self.residual_length,
-                                                                                           self.group_size)
+            query_states, key_states, \
+            value_states_quant, value_states_full, value_mn, value_scale, \
+            key_mn, key_scale = fused_rope_and_quant_prefill(query_states, 
+                                                        key_states, 
+                                                        value_states, 
+                                                        cos, sin, position_ids, 
+                                                        self.k_bits, self.v_bits, 
+                                                        self.residual_length,
+                                                        self.group_size)
             # print(f"kivi with flash! {self.k_bits}")
             key_states_repeat = repeat_kv(key_states, self.num_key_value_groups)
             value_states_repeat = repeat_kv(value_states, self.num_key_value_groups)
@@ -203,7 +205,17 @@ class LlamaFlashAttention_KIVI(LlamaAttention_KIVI):
                 key_states_quant = key_states
                 key_states_full = None
             if key_states_quant is not None:
-                key_states_quant_trans, key_scale_trans, key_mn_trans = triton_quantize_and_pack_along_last_dim(key_states_quant.transpose(2, 3).contiguous(), 
+                if ((key_scale is not None) and (key_mn is not None)): 
+                    # fused rope and quant kernel already calculated k_mn and k_scale
+                    key_scale_trans = key_scale.transpose(2, 3).contiguous()
+                    key_mn_trans = key_mn.transpose(2, 3).contiguous()
+                    key_states_quant_trans = triton_pack_along_last_dim(key_states_quant.transpose(2, 3).contiguous(),
+                                                                   key_mn_trans,
+                                                                   key_scale_trans,
+                                                                   self.group_size,
+                                                                   self.k_bits)
+                else: 
+                    key_states_quant_trans, key_scale_trans, key_mn_trans = triton_quantize_and_pack_along_last_dim(key_states_quant.transpose(2, 3).contiguous(), 
                                                                                                                 self.group_size, 
                                                                                                                 self.k_bits)
             else:

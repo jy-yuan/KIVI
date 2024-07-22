@@ -187,69 +187,34 @@ def _fused_rope_embedding(
         scale = (mx_val - mn_val) / (2 ** v_bit - 1)
         tl.store(V_scale+offset_v_mn_scale+i, scale, mask=offset_v_mn_scale<total_V_elements//group_size-i)
     # Calculate K scale and mn
-    ok_base = row_position*K_b_stride + seq_len_position[:, None]*K_s_stride + head_position*head_dim
-    # ok_base points to a tensor of shape [group_size, head_dim]
-    # for i in range(head_dim):
-    #     # Get mn and scale for each channel (head dim)
-    #     offsets_K = ok_base + i
-    #     cK = tl.load(K + offsets_K, mask=offsets_K<total_K_elements)
-    #     mx_val = tl.max(cK)
-    #     mn_val = tl.min(cK)
-    #     offset_k_mn_scale = row_position * Q_b_stride // group_size + \
-    #                         sid * Q_s_stride  + \
-    #                         head_position * head_dim
-        
-    #     if (((i == 0 and row_position == 0) and sid == 0) and head_position == 0):
-    #         tl.device_print("offsets_K", offsets_K)
-    #         tl.device_print("ok_base", ok_base)
-    #         tl.device_print("ck", cK)
-    #         tl.device_print("mn_val", mn_val)
-    #     if (((i == 1 and row_position == 0) and sid == 0) and head_position == 0):
-    #         tl.device_print("offsets_K", offsets_K)
-    #         tl.device_print("ok_base", ok_base)
-    #         tl.device_print("ck", cK)
-    #         tl.device_print("mn_val", mn_val)
-            
-    #     tl.store(K_mn+offset_k_mn_scale+i, mn_val, mask=offset_k_mn_scale<total_K_elements//group_size-i)
-    #     scale = (mx_val - mn_val) / (2 ** k_bit - 1)
-    #     tl.store(K_scale+offset_k_mn_scale+i, scale, mask=offset_k_mn_scale<total_K_elements//group_size-i)
-        
-        
-        
+    k_mx_val_1 = tl.max(K1*cos1 - K2*sin1, axis=0)[None, :] # 128
+    k_mn_val_1 = tl.min(K1*cos1 - K2*sin1, axis=0)[None, :]
+    k_mx_val_2 = tl.max(K2*cos1 + K1*sin1, axis=0)[None, :]
+    k_mn_val_2 = tl.min(K2*cos1 + K1*sin1, axis=0)[None, :]
+    k_scale_1 = (k_mx_val_1 - k_mn_val_1)
+    k_scale_2 = (k_mx_val_2 - k_mn_val_2)
 
-
-
-
-
-
-
-    k_mx_val_1 = tl.max(K1*cos1 - K2*sin1, axis=0) # 128
-    k_mn_val_1 = tl.min(K1*cos1 - K2*sin1, axis=0)
-    k_mx_val_2 = tl.max(K2*cos1 + K1*sin1, axis=0)
-    k_mn_val_2 = tl.min(K2*cos1 + K1*sin1, axis=0)
+    mask_grouped_row = sid + tl.arange(0, 1)  < seqlen // group_size
+    mn_scale_mask = mask_grouped_row[:, None] & mask_col[None, :]
+    mn_scale_mask = mn_scale_mask  
 
     offset_k_mn_scale = row_position * K_b_stride // group_size + \
                         sid * K_s_stride  + \
                         head_position * head_dim
-    tl.store(K_mn+half_head_dim*1+offset_k_mn_scale+tl.arange(0, head_dim), 
+    tl.store(K_mn+half_head_dim*1+offset_k_mn_scale+tl.arange(0, head_dim)[None, :], 
                 k_mn_val_2, 
-                mask=mask_col)
-    tl.store(K_mn+half_head_dim*0+offset_k_mn_scale+tl.arange(0, head_dim), 
+                mask=mn_scale_mask)
+    tl.store(K_mn+half_head_dim*0+offset_k_mn_scale+tl.arange(0, head_dim)[None, :], 
                 k_mn_val_1, 
-                mask=mask_col)
-            #  mask=offset_k_mn_scale+tl.arange(0, head_dim)<total_K_elements//group_size-i)
+                mask=mn_scale_mask)
 
-    k_scale_1 = (k_mx_val_1 - k_mn_val_1)
-    k_scale_2 = (k_mx_val_2 - k_mn_val_2)
-    # k_scale_1 = (k_mx_val_1 - k_mn_val_1) / (2 ** k_bit - 1)
-    # k_scale_2 = (k_mx_val_2 - k_mn_val_2) / (2 ** k_bit - 1)
-    tl.store(K_scale+half_head_dim*0+offset_k_mn_scale+tl.arange(0, head_dim), 
+
+    tl.store(K_scale+half_head_dim*0+offset_k_mn_scale+tl.arange(0, head_dim)[None, :], 
                 k_scale_1, 
-                mask=mask_col)
-                # mask=offset_k_mn_scale+tl.arange(0, head_dim)<total_K_elements//group_size)
-    tl.store(K_scale+half_head_dim*1+offset_k_mn_scale+tl.arange(0, head_dim), 
+                mask=mn_scale_mask)
+    tl.store(K_scale+half_head_dim*1+offset_k_mn_scale+tl.arange(0, head_dim)[None, :], 
                 k_scale_2, 
-                mask=mask_col)
+                mask=mn_scale_mask)
 
 def get_mi_scale_ref(x, group_size, num_heads, bits):
     assert len(x.shape) == 3
@@ -403,6 +368,7 @@ def fused_rope_and_quant_prefill(Q, K, V, cos, sin, position_ids, k_bit, v_bit, 
         v_mn = None
         Q = fast_rope_ref(Q, cos, sin, position_ids)
         K = fast_rope_ref(K, cos, sin, position_ids)
+        return Q, K, v_quant, v_full, v_mn, v_scale, None, None
     else:
         v_quant = V[:, :, :-r, :]
         v_full = V[:, :, -r:, :]
@@ -411,7 +377,7 @@ def fused_rope_and_quant_prefill(Q, K, V, cos, sin, position_ids, k_bit, v_bit, 
                                             v_mn, v_scale,
                                             group_size, 
                                             v_bit)
-    return Q, K, v_quant, v_full, v_mn, v_scale, k_mn, k_scale
+        return Q, K, v_quant, v_full, v_mn, v_scale, k_mn, k_scale
 
 
 if __name__ == "__main__":
