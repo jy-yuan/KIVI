@@ -132,8 +132,10 @@ def _fused_rope_embedding(
         - Applies RoPE to Q and K (! IN PLACE !), Then:
         - Store V's scaling factor in V_scale
         - Store V's min value in V_mn
-        - Store K's scaling factor in K_scale (For rotated K)
-        - Store K's min value in K_mn (For rotated K) (without deviding k_bit)
+        - Store K's scaling factor in K_scale (For rotated K)(without deviding k_bit)
+            Note: deviding k_bit is done in the caller function, to avoid difference
+            with reference implementation that devided in python instead of triton.
+        - Store K's min value in K_mn (For rotated K) 
     """
     row_position = tl.program_id(0)
     sid = tl.program_id(1)
@@ -318,13 +320,6 @@ def fused_rope_and_quant(Q, K, V, cos, sin, position_ids, k_bit, v_bit, group_si
         BLOCK_SIZE = BLOCK_SIZE,
         num_warps  = num_warps,
     )
-    # v_mi_ref, v_scale_ref = get_mi_scale_ref(V, group_size, n_heads, v_bit)
-    # assert torch.allclose(v_mi_ref, V_mn)
-    # assert torch.allclose(v_scale_ref, V_scale, atol=1e-2)
-    
-    # k_mn_ref, k_scale_ref = get_k_mi_scale_ref(K, group_size, n_heads, k_bit)
-    # assert torch.allclose(k_mn_ref, K_mn, atol=1e-4)
-    # assert torch.allclose(k_scale_ref, K_scale, atol=1e-2) 
     K_scale = K_scale / (2 ** k_bit - 1)
 
     return Q.view(batch, q_seq_len, n_heads, head_dim).transpose(1, 2), \
