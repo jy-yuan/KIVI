@@ -179,6 +179,19 @@ def _minmax_along_last_dim(
 	
 
 def triton_quantize_and_pack_along_last_dim(data: torch.Tensor, group_size: int, bit: int):
+	"""
+	Quantize and pack the input tensor along the last dimension
+
+	Args: 
+		data: the input data tensor to be quantized (shape: B, NH, HD, SL(T))
+		group_size: the group_size that will be quantized together
+		bit: the quantization bit
+
+	Returns:
+		code: torch.Tensor: the quantized and packed tensor (shape: B, NH, HD, -1)
+		scale: torch.Tensor: the scale value of the input tensor (shape: B, NH, HD, NG)
+		mn: torch.Tensor: the min value of the input tensor (shape: B, NH, HD, NG)
+	"""
 	assert len(data.shape) == 4
 	shape = data.shape
 	B, nh, D, T = shape
@@ -219,6 +232,19 @@ def triton_pack_along_last_dim(data: torch.Tensor,
 							   mn: torch.Tensor,
 							   scale: torch.Tensor,
 							   group_size: int, bit: int):
+	"""
+	Quantize and pack the input tensor along the last dimension
+
+	Args:
+		data (torch.Tensor): Input tensor of shape (B, nh, D, T)
+		mn (torch.Tensor): Min value of the input tensor (B, nh, D, num_groups)
+		scale (torch.Tensor): Scale value of the input tensor (B, nh, D, num_groups)
+		group_size (int): Group size for packing
+		bit (int): Number of bits for quantization
+	
+	Returns:
+		code: torch.Tensor: data with quantization and packing applied
+	"""
 	assert len(data.shape) == 4
 	shape = data.shape
 	B, nh, D, T = shape
