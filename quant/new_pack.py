@@ -229,7 +229,8 @@ def triton_quantize_and_pack_along_last_dim(data: torch.Tensor, group_size: int,
 	mn = torch.empty((B * nh * D, num_groups), device=data.device, dtype=data.dtype)
 	BLOCK_SIZE_N = 128
 	grid = lambda meta: (triton.cdiv(data.shape[0]*data.shape[1], BLOCK_SIZE_N),)
-	_minmax_along_last_dim[grid](data, mn, mx,
+	with torch.cuda.device(data.device):
+		_minmax_along_last_dim[grid](data, mn, mx,
 							 data.numel(), data.shape[0], num_groups, group_size,
 							 BLOCK_SIZE_N=BLOCK_SIZE_N, num_warps=8) 
 	# mn = torch.min(data, dim=-1, keepdim=True)[0].squeeze(-1)
@@ -243,7 +244,8 @@ def triton_quantize_and_pack_along_last_dim(data: torch.Tensor, group_size: int,
 	packshape = (np.prod(shape[:-1]), shape[-1] // feat_per_int,)
 	code = torch.zeros(*packshape, device=data.device, dtype=torch.int32)
 	grid = lambda meta: (triton.cdiv(data.shape[0], BLOCK_SIZE_N), data.shape[1] // feat_per_int,)
-	_pack_along_last_dim[grid](bit, data, code, data.shape[0], 
+	with torch.cuda.device(data.device):
+		_pack_along_last_dim[grid](bit, data, code, data.shape[0], 
 								data.shape[1], feat_per_int, 
 								BLOCK_SIZE_N=BLOCK_SIZE_N, 
 								num_warps=8)
