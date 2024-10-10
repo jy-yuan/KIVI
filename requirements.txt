@@ -46,7 +46,7 @@ fonttools==4.50.0
 frozenlist==1.4.1
 fsspec==2023.10.0
 fuzzywuzzy==0.18.0
-gradio==3.35.2
+gradio==5.0.0
 gradio_client==0.2.9
 h11==0.14.0
 hjson==3.1.0
