@@ -3,7 +3,7 @@
 Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
 
 ## Updates
-- [2025.01.18]:We add KIVI implementation with GQA and compatiable with transformers 4.43. Please reinstall KIVI.
+- [2025.01.18]:We add KIVI implementation with GQA and compatiable with transformers 4.43. Now it supports LLama3 family. Please reinstall KIVI.
 - [2024.06.07]:🎉 KIVI largely inspires the [HuggingFace Transformers KV Cache quantization](https://huggingface.co/docs/transformers/main/en/kv_cache)
 - [2024.06.06]:(Beta) We extensively optimize the codebase in [branch develop](https://github.com/jy-yuan/KIVI/tree/develop) to reduce the latency of KIVI. Note that **you need to reinstall our CUDA implementation** under the ```quant``` folder. We will release a blog soon about the detailed optimization.
 - [2024.05.01]:🎉 KIVI has been accepted by ICML 2024! See you in Vienna!
