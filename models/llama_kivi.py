@@ -35,6 +35,7 @@ class LlamaAttention_KIVI(nn.Module):
         self.v_bits = config.v_bits
         self.group_size = config.group_size
         self.residual_length = config.residual_length
+        assert getattr(config, "use_flash", False), "currently KIVI is only available for flash-attn. Please add ```config.use_flash = True```"
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
