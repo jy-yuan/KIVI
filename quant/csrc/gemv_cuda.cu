@@ -264,7 +264,7 @@ Notes:
 */
 __global__ void bgemv4_kernel_outer_dim(
   const half* _inputs, const uint32_t* _weight, const half* _zeros, const half* _scale, half* _outputs, 
-  const int IC, const int OC, const int group_size, const int nh, const bool mqa){
+  const int IC, const int OC, const int group_size, const int nh, const int nh_kv){
     const int bit = 4;
     const int pack_factor = 8;
     const int batch_idx = blockIdx.x;
@@ -273,12 +273,8 @@ __global__ void bgemv4_kernel_outer_dim(
     const int group_idx = oc_start_idx / group_size; 
     const half* inputs = _inputs + batch_idx * IC;
     half* outputs = _outputs + batch_idx * OC;
-    int _batch_idx;
-    if (mqa){
-      _batch_idx = batch_idx / nh;
-    }else{
-      _batch_idx = batch_idx;
-    }
+    const int ratio = nh / nh_kv;
+    int _batch_idx = batch_idx / ratio;
     const uint32_t*  weight = _weight + _batch_idx * OC * IC / pack_factor;
     const half* scaling_factors = _scale + _batch_idx * OC * IC / group_size;
     const half* zeros = _zeros + _batch_idx * OC * IC / group_size;
@@ -351,7 +347,7 @@ __global__ void bgemv4_kernel_outer_dim(
 
 __global__ void bgemv2_kernel_outer_dim(
   const half* _inputs, const uint32_t* _weight, const half* _zeros, const half* _scale, half* _outputs, 
-  const int IC, const int OC, const int group_size, const int nh, const bool mqa){
+  const int IC, const int OC, const int group_size, const int nh, const int nh_kv){
     // const int group_size = 64;
     const int bit = 2;
     const int pack_factor = 16;
@@ -362,12 +358,8 @@ __global__ void bgemv2_kernel_outer_dim(
     const int ICR = IC;
     const half* inputs = _inputs + batch_idx * ICR;
     half* outputs = _outputs + batch_idx * OC;
-    int _batch_idx;
-    if (mqa){
-      _batch_idx = batch_idx / nh;
-    }else{
-      _batch_idx = batch_idx;
-    }
+    const int ratio = nh / nh_kv;
+    int _batch_idx = batch_idx / ratio;
     const uint32_t*  weight = _weight + _batch_idx * OC * IC / pack_factor;
     const half* scaling_factors = _scale + _batch_idx * OC * IC / group_size;
     const half* zeros = _zeros + _batch_idx * OC * IC / group_size;
@@ -524,7 +516,7 @@ torch::Tensor gemv_forward_cuda_outer_dim(
     const int bit,
     const int group_size,
     const int nh,
-    const bool mqa)
+    const int nh_kv)
 {
     int BS = _in_feats.size(0);
     int num_in_feats = _in_feats.size(1);
@@ -550,7 +542,7 @@ torch::Tensor gemv_forward_cuda_outer_dim(
         // pointers
         in_feats, kernel, zeros, scaling_factors, out_feats,
         // constants
-        num_in_channels, num_out_channels, group_size, nh, mqa
+        num_in_channels, num_out_channels, group_size, nh, nh_kv
       );}
     else{
       // note: in this case, pack factor == 16
@@ -558,7 +550,7 @@ torch::Tensor gemv_forward_cuda_outer_dim(
         // pointers
         in_feats, kernel, zeros, scaling_factors, out_feats,
         // constants
-        num_in_channels, num_out_channels, group_size, nh, mqa
+        num_in_channels, num_out_channels, group_size, nh, nh_kv
       );     
       }
     return _out_feats;

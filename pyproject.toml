@@ -14,12 +14,14 @@ classifiers = [
 ]
 dependencies = [
     "packaging==24.0", "sentencepiece", "tokenizers>=0.15",
-    "torch==2.1.2", "ipdb",
-    "transformers==4.36.2", 
+    "torch==2.4.1", "ipdb",
+    "transformers==4.43.1", 
     "toml", "attributedict",
-    "accelerate==0.25.0",
+    "accelerate",
     "fastchat",
     "protobuf",
+    "flash-attn",
+    "datasets"
 ]
 
 [tool.setuptools.packages.find]

@@ -46,34 +46,8 @@ class LlamaAttention_KIVI(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-        self._init_rope()
+        self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
 
-    def _init_rope(self):
-        if self.config.rope_scaling is None:
-            self.rotary_emb = LlamaRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
-        else:
-            scaling_type = self.config.rope_scaling["type"]
-            scaling_factor = self.config.rope_scaling["factor"]
-            if scaling_type == "linear":
-                self.rotary_emb = LlamaLinearScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            elif scaling_type == "dynamic":
-                self.rotary_emb = LlamaDynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            else:
-                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -123,7 +97,7 @@ class LlamaAttention_KIVI(nn.Module):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[-1]
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         assert self.num_key_value_groups == 1
         # [bsz, nh, t, hd]
@@ -332,9 +306,9 @@ class LlamaFlashAttention_KIVI(LlamaAttention_KIVI):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[-1]
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-        assert self.num_key_value_groups == 1
+        # assert self.num_key_value_groups == 1
         # [bsz, nh, t, hd]
         if past_key_value is not None:
             key_states_quant_trans = past_key_value[0]
@@ -345,7 +319,6 @@ class LlamaFlashAttention_KIVI(LlamaAttention_KIVI):
             value_states_full = past_key_value[5]
             value_scale = past_key_value[6]
             value_mn = past_key_value[7]
-
             if key_states_quant_trans is not None:
                 att_qkquant = cuda_bmm_fA_qB_outer(self.group_size, query_states, key_states_quant_trans, 
                                 key_scale_trans, key_mn_trans, self.k_bits)
@@ -360,7 +333,7 @@ class LlamaFlashAttention_KIVI(LlamaAttention_KIVI):
                 key_states_full = torch.cat([key_states_full, key_states], dim=2)
             else:
                 key_states_full = key_states
-            att_qkfull = torch.matmul(query_states, key_states_full.transpose(2, 3))
+            att_qkfull = torch.matmul(query_states, repeat_kv(key_states_full, self.num_key_value_groups).transpose(2, 3))
             if att_qkquant is not None:
                 attn_weights = torch.cat([att_qkquant, att_qkfull], dim=-1) / math.sqrt(self.head_dim)
             else:
@@ -407,7 +380,7 @@ class LlamaFlashAttention_KIVI(LlamaAttention_KIVI):
             else:
                 attn_output = cuda_bmm_fA_qB_outer(self.group_size, attn_weights[:, :, :, :-value_full_length], value_states_quant, 
                                                 value_scale, value_mn, self.v_bits)
-                attn_output += torch.matmul(attn_weights[:, :, :, -value_full_length:], value_states_full)
+                attn_output += torch.matmul(attn_weights[:, :, :, -value_full_length:], repeat_kv(value_states_full, self.num_key_value_groups))
             attn_output = attn_output.transpose(1, 2).contiguous()
             if value_full_length > self.residual_length:
                 assert value_full_length == self.residual_length + 1
@@ -934,6 +907,10 @@ class LlamaForCausalLM_KIVI(LlamaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        if isinstance(past_key_values, DynamicCache):
+            past_key_values = past_key_values.to_legacy_cache()
+            if len(past_key_values) == 0:
+                past_key_values = None
         if past_key_values is not None:
             past_length = past_key_values[0][-1]
             # Some generation methods already pass only the last input ID

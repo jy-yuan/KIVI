@@ -180,8 +180,7 @@ def cuda_bmm_fA_qB_outer(group_size: int,
 				qB: torch.IntTensor, 
 				scales: torch.FloatTensor, 
 				zeros: torch.FloatTensor,
-				bits: int,
-				mqa: bool=False) -> torch.FloatTensor:
+				bits: int) -> torch.FloatTensor:
 	"""
 	Compute the matrix multiplication C = query x key.
 	Where key is quantized into 2-bit values.
@@ -198,6 +197,7 @@ def cuda_bmm_fA_qB_outer(group_size: int,
 	"""    
 	assert len(fA.shape) == 4 and len(qB.shape) == 4
 	B, nh, M, K = fA.shape 
+	nh_kv =  qB.shape[1]
 	feat_per_int = 32 // bits
 	# flatten to a 3D tensor
 	fA = fA.view(-1, M, K).contiguous()
@@ -209,12 +209,11 @@ def cuda_bmm_fA_qB_outer(group_size: int,
 	# assert N % 16 == 0 and N % 32 == 0 and N % 64 == 0, "N must be a multiple of 16, 32, 64, 128, and 256"
 	# This is based on the possible BLOCK_SIZE_Ks
 	# assert group_size % 64 == 0, "groupsize must be a multiple of 64, and 128"
-	flatten_B = B * nh
-	if mqa:
-		flatten_B = B
+	flatten_B = B * nh_kv
 	scales = scales.view(flatten_B, scales.shape[-2], scales.shape[-1]).transpose(1, 2).contiguous()
 	zeros = zeros.view(flatten_B, zeros.shape[-2], zeros.shape[-1]).transpose(1, 2).contiguous()
 	assert bits in [2, 4]
-	c = kivi_gemv.gemv_forward_cuda_outer_dim(fA, qB, scales, zeros, bits, group_size, nh, mqa)
+	assert nh % nh_kv == 0
+	c = kivi_gemv.gemv_forward_cuda_outer_dim(fA, qB, scales, zeros, bits, group_size, nh, nh_kv)
 	c = c.view(B, nh, c.shape[-2], c.shape[-1])
 	return c

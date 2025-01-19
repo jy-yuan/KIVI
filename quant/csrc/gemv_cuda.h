@@ -18,4 +18,4 @@ torch::Tensor gemv_forward_cuda_outer_dim(
     const int bit,
     const int group_size,
     const int nh,
-    const bool mqa);
+    const int nh_kv);
