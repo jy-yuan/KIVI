@@ -3,7 +3,7 @@
 Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
 
 ## Updates
-- [2025.09.25]:We released a new work on the impact of numerical precision to reasoning evaluation, as well as the associated problems of RL training-serving system precision mismatch [[paper](https://arxiv.org/pdf/2506.09501), [code](https://github.com/nanomaoli/llm_reproducibility)]. Please star it if you find this work is interesting and useful for your research!
+- [2025.09.25]:🔥🔥🔥 We released a new work on the impact of numerical precision to reasoning evaluation, as well as the associated problems of RL training-serving system precision mismatch [[paper](https://arxiv.org/pdf/2506.09501), [code](https://github.com/nanomaoli/llm_reproducibility)]. Please 🌟  it if you find this work is interesting and useful for your research!
 - [2025.01.18]:We add KIVI implementation with GQA and compatiable with transformers 4.43. Now it supports LLama3 family. Please reinstall KIVI.
 - [2024.06.07]:🎉 KIVI largely inspires the [HuggingFace Transformers KV Cache quantization](https://huggingface.co/docs/transformers/main/en/kv_cache)
 - [2024.06.06]:(Beta) We extensively optimize the codebase in [branch develop](https://github.com/jy-yuan/KIVI/tree/develop) to reduce the latency of KIVI. Note that **you need to reinstall our CUDA implementation** under the ```quant``` folder.
