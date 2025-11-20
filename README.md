@@ -1,13 +1,13 @@
 # KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache
 
-Implementation of [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
+Implementation of [ICML24] [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache](https://arxiv.org/abs/2402.02750)
 
 ## Updates
-- [2025.09.25]:🔥🔥🔥 We released a new work on the impact of numerical precision to reasoning evaluation, as well as the associated problems of RL training-serving system precision mismatch [[paper](https://arxiv.org/pdf/2506.09501), [code](https://github.com/nanomaoli/llm_reproducibility)]. Please 🌟  it if you find this work is interesting and useful for your research!
-- [2025.01.18]:We add KIVI implementation with GQA and compatiable with transformers 4.43. Now it supports LLama3 family. Please reinstall KIVI.
-- [2024.06.07]:🎉 KIVI largely inspires the [HuggingFace Transformers KV Cache quantization](https://huggingface.co/docs/transformers/main/en/kv_cache)
-- [2024.06.06]:(Beta) We extensively optimize the codebase in [branch develop](https://github.com/jy-yuan/KIVI/tree/develop) to reduce the latency of KIVI. Note that **you need to reinstall our CUDA implementation** under the ```quant``` folder.
-- [2024.05.01]:🎉 KIVI has been accepted by ICML 2024! See you in Vienna!
+- [2025.09.25]: 🔥🔥🔥 We released a toolkit that tests the impact of numerical precision and enables deterministic LLM inference. This helps eliminate the training–inference mismatch in reinforcement learning. Please 🌟 it if you find this work is interesting and useful for your research! <https://github.com/nanomaoli/llm_reproducibility)>
+- [2025.01.18]: We add KIVI implementation with GQA and compatiable with transformers 4.43. Now it supports LLama3 family. Please reinstall KIVI.
+- [2024.06.07]: 🎉 KIVI largely inspires the [HuggingFace Transformers KV Cache quantization](https://huggingface.co/docs/transformers/main/en/kv_cache)
+- [2024.06.06]: (Beta) We extensively optimize the codebase in [branch develop](https://github.com/jy-yuan/KIVI/tree/develop) to reduce the latency of KIVI. Note that **you need to reinstall our CUDA implementation** under the ```quant``` folder.
+- [2024.05.01]: 🎉 KIVI has been accepted by ICML 2024! See you in Vienna!
 - [2024.04.12]: We add the support for Mistral model family. The performance of LongChat-7b-v1.5-32K and Mistral-7B-Instruct-v0.2 on 15 tasks from LongBench can be found in [long_bench.md](./docs/long_bench.md).
 
 - [2024.04.05]: We release the code for reproducing our CoQA/TruthfulQA/GSM8K results using LM-Eval. Please check the [README of branch lmeval](https://github.com/jy-yuan/KIVI/tree/lmeval).
