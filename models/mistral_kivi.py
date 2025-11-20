@@ -490,7 +490,7 @@ class MistralFlashAttention_KIVI(MistralAttention_KIVI):
                 value_states_repeat = value_states_repeat.to(target_dtype)
             attn_output = self._flash_attention_forward(
                 query_states.transpose(1, 2), key_states_repeat.transpose(1, 2), 
-                value_states_repeat.transpose(1, 2), None, q_len, dropout=0.0
+                value_states_repeat.transpose(1, 2), attention_mask, q_len, dropout=0.0
             )
             # quantize
             if key_states.shape[-2] % self.residual_length != 0:
