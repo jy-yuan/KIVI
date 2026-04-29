@@ -19,3 +19,18 @@ third_party
 speed_logs
 pred
 pred_e
+# 모델 가중치 (수십GB)
+models/Llama-2-7b-hf/
+models/Llama-2-13b-hf/
+models/Mistral-7B/
+
+# 실험 로그
+nohup.out
+*.log
+
+# quant 빌드 산출물
+quant/dist/
+
+# 예외: 중요 스크립트와 설정 파일은 추적
+!run_full_ablation.sh
+!config/*.json
